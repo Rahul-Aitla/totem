@@ -1,0 +1,86 @@
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from app.services.intent_detector import intent_detector
+from app.models import VoiceLog, Intent
+from app.database import get_db
+import uuid
+from datetime import datetime
+
+router = APIRouter(prefix="/intent", tags=["intent"])
+
+@router.post("/detect")
+async def detect_intent(
+    voice_log_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Extract intent from transcribed text
+    Returns: confirmation message + intent details
+    """
+    try:
+        voice_log_uuid = uuid.UUID(voice_log_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid voice_log_id format")
+
+    voice_log = db.query(VoiceLog).filter(VoiceLog.id == voice_log_uuid).first()
+    if not voice_log:
+        raise HTTPException(status_code=404, detail="Voice log not found")
+    
+    # Extract intent
+    intent_result = intent_detector.extract_intent(voice_log.transcribed_text)
+    
+    # Save to database
+    intent = Intent(
+        voice_log_id=voice_log_uuid,
+        extracted_task=intent_result['task'],
+        format=intent_result['format'],
+        domain=intent_result['domain'],
+        constraints=intent_result.get('constraints', {}),
+        intent_confidence=intent_result['confidence'],
+        status="pending"
+    )
+    db.add(intent)
+    db.commit()
+    db.refresh(intent)
+    
+    # Build confirmation message
+    confirmation_msg = f"You want to {intent_result['task'].lower()} in {intent_result['format'].replace('_', ' ')}. Confirm?"
+    
+    return {
+        "intent_id": str(intent.id),
+        "intent": intent_result,
+        "confirmation_message": confirmation_msg,
+        "confidence": intent_result['confidence']
+    }
+
+@router.post("/confirm")
+async def confirm_intent(
+    intent_id: str,
+    confirmed: bool,
+    action: str,  # 'confirm', 'reject', 'clarify'
+    db: Session = Depends(get_db)
+):
+    """
+    User confirms or rejects intent
+    """
+    try:
+        intent_uuid = uuid.UUID(intent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid intent_id format")
+
+    intent = db.query(Intent).filter(Intent.id == intent_uuid).first()
+    if not intent:
+        raise HTTPException(status_code=404, detail="Intent not found")
+    
+    intent.user_confirmed = confirmed
+    intent.confirmation_action = action
+    intent.status = "confirmed" if confirmed else "rejected"
+    intent.confirmation_timestamp = datetime.utcnow()
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Proceeding to optimization" if confirmed else "Intent rejected",
+        "status": intent.status
+    }

@@ -173,22 +173,6 @@ The Voice-Driven Deterministic Prompt Optimization Engine is a full-stack web ap
 
 ---
 
-### 4.7 Real-time Updates
-**Feature:** WebSocket-based real-time communication
-
-**Requirements:**
-- Show status updates: recording → processing → optimized
-- WebSocket connection to backend
-- Handle connection drops gracefully
-- Automatic reconnection
-
-**Success Criteria:**
-- Updates appear within 100ms
-- No data loss on disconnect
-- Graceful error handling
-
----
-
 ## 5. USER WORKFLOWS
 
 ### Workflow 1: Basic Voice → Prompt Optimization
@@ -197,7 +181,7 @@ User Records Voice
   ↓
 System Transcribes (Deepgram)
   ↓
-System Extracts Intent (IndicBERT + Gemini)
+System Extracts Intent (Gemini)
   ↓
 User Confirms Intent (Modal)
   ↓
@@ -247,7 +231,6 @@ User Exports Decision Logs
 - Intent confirmation: <1 second
 - Prompt optimization: <2 seconds
 - Total pipeline: <5 seconds
-- Real-time updates: <100ms latency
 
 ### Reliability
 - 99.9% uptime (managed hosting)

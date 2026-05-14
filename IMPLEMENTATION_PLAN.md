@@ -16,7 +16,7 @@
 ├──────────────────────────────────────────────────────────────┤
 │  Phase 1 (Weeks 1-2):   Backend Foundation + STT             │
 │  Phase 2 (Weeks 3-4):   Intent + Confirmation + Optimization │
-│  Phase 3 (Weeks 5-6):   Frontend + Real-time                 │
+│  Phase 3 (Weeks 5-6):   Frontend UI + Flow Integration       │
 │  Phase 4 (Weeks 7-8):   Memory + Analytics + Graph           │
 │  Phase 5 (Weeks 9-10):  Deployment + Documentation + Demo    │
 │                                                              │
@@ -31,7 +31,7 @@
 ### Objectives
 - Set up FastAPI project structure
 - Implement Deepgram STT integration
-- Build IndicBERT intent detection
+- Build Gemini intent detection
 - Create PostgreSQL database schema
 - Build voice upload endpoint
 
@@ -46,7 +46,7 @@ mkdir backend
 cd backend
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
-pip install fastapi uvicorn python-socketio sqlalchemy psycopg2-binary pydantic
+pip install fastapi uvicorn sqlalchemy psycopg2-binary pydantic google-generativeai
 
 # Create files
 touch main.py config.py models.py schemas.py database.py
@@ -202,79 +202,60 @@ assert result['confidence'] > 0.6  # Confidence check
 - [ ] Confidence scoring working
 - [ ] Error handling for low confidence
 
-**Task 2.2: IndicBERT Intent Detection** (4 hours)
+**Task 2.2: Gemini Intent Detection** (4 hours)
 ```python
 # backend/app/services/intent_detector.py
 
-from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-import torch
+import google.generativeai as genai
+import os
+import json
 
 class IntentDetector:
     def __init__(self):
-        # Load MuRIL model for Hindi/English
-        self.tokenizer = AutoTokenizer.from_pretrained("google/muril-base-cased")
-        self.model = AutoModelForSequenceClassification.from_pretrained(
-            "google/muril-base-cased",
-            num_labels=5
-        )
-        
-        # Intent labels
-        self.labels = ["marketing", "technical", "general", "creative", "analysis"]
+        self.api_key = os.getenv("GEMINI_API_KEY")
+        genai.configure(api_key=self.api_key)
+        self.model = genai.GenerativeModel('gemini-pro')
     
     def extract_intent(self, text):
         """
-        Extract intent from text
+        Extract intent from text using Gemini
         Returns: {task, format, domain, confidence}
         """
-        inputs = self.tokenizer(text, return_tensors="pt")
-        outputs = self.model(**inputs)
-        logits = outputs.logits
+        prompt = f"""
+        Extract the user's intent from the following text (which may be in English, Hindi, or Hinglish).
+        Text: "{text}"
         
-        # Get intent
-        intent_idx = torch.argmax(logits, dim=1).item()
-        confidence = torch.softmax(logits, dim=1)[0][intent_idx].item()
-        intent = self.labels[intent_idx]
+        Return a JSON object with:
+        - task: The main action requested.
+        - format: Preferred output format (e.g., bullet_points, paragraph, code).
+        - domain: The subject area (e.g., marketing, technical, creative).
+        - confidence: A score from 0.0 to 1.0 based on clarity.
         
-        # Extract entities (task, format, etc)
-        task = self._extract_task(text)
-        format = self._extract_format(text)
+        ONLY return the JSON object.
+        """
         
-        return {
-            "task": task,
-            "format": format,
-            "domain": intent,
-            "confidence": confidence
-        }
-    
-    def _extract_task(self, text):
-        """Extract main task from text"""
-        # Rule-based extraction
-        if "marketing" in text.lower():
-            return "Create marketing strategy"
-        elif "code" in text.lower():
-            return "Generate code"
-        else:
-            return "General task"
-    
-    def _extract_format(self, text):
-        """Extract output format preference"""
-        if "bullet" in text.lower() or "points" in text.lower():
-            return "bullet_points"
-        elif "paragraph" in text.lower():
-            return "paragraph"
-        else:
-            return "default"
+        try:
+            response = self.model.generate_content(prompt)
+            # Simple parsing for MVP
+            data = json.loads(response.text.strip().replace('```json', '').replace('```', ''))
+            return data
+        except Exception as e:
+            return {
+                "task": "General task",
+                "format": "default",
+                "domain": "general",
+                "confidence": 0.5
+            }
 
 # Test
 detector = IntentDetector()
 result = detector.extract_intent("Ek marketing plan bana do for gym app")
 print(result)
-# Output: {task: "Create marketing plan", format: "bullet_points", domain: "marketing", confidence: 0.92}
 ```
 
 **Deliverables:**
 - [ ] `intent_detector.py` created
-- [ ] IndicBERT model loaded
+- [ ] Gemini API integration for intent working
 - [ ] Intent extraction working on test inputs
 - [ ] Entity extraction (task, format, domain)
 - [ ] Confidence scoring implemented
@@ -719,7 +700,7 @@ validator = ValidationLayer()
 ### Objectives
 - Build React components
 - Implement voice recording
-- Create real-time WebSocket communication
+- Create efficient state management for optimization flow
 - Build confirmation modal
 - Create chat interface
 
@@ -733,7 +714,6 @@ validator = ValidationLayer()
 - [ ] `PromptDisplay.tsx` - Output + metrics
 - [ ] `ChatHistory.tsx` - Conversation
 - [ ] `GraphVisualization.tsx` - Vis.js graph
-- [ ] Real-time Socket.io integration
 - [ ] API routes as middleware
 
 ---
@@ -799,14 +779,12 @@ python tests/test_full_pipeline.py
 - [ ] Environment variables set
 - [ ] Database migrations run
 - [ ] API endpoints responsive
-- [ ] WebSocket working
 - [ ] Error monitoring (Sentry)
 
 ### Frontend (Vercel)
 - [ ] Build succeeds
 - [ ] Environment variables set
 - [ ] API routes working
-- [ ] Socket.io connecting
 - [ ] Mobile responsive
 - [ ] Performance optimized
 

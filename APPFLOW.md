@@ -83,7 +83,6 @@ User Copies or Views History
 - Encode audio (WAV/MP3)
 - Send to backend via HTTPS
 - Show upload progress
-- Emit Socket.io event: `voice_received`
 
 **Error Handling:**
 - Network timeout → Retry with exponential backoff
@@ -108,14 +107,13 @@ User Copies or Views History
 ```
 
 **Backend Actions:**
-- Call Deepgram API (real-time streaming)
+- Call Deepgram API (prerecorded or streaming)
 - Receive transcription: "Ek marketing plan bana do for gym app"
 - Detect language: "hinglish"
 - Get confidence: 0.98 (98%)
-- Emit Socket.io: `transcription_complete`
 
 **Error Handling:**
-- Low confidence (<60%) → Emit `low_confidence` → Frontend shows: "Couldn't hear clearly. Record again?"
+- Low confidence (<60%) → Frontend shows: "Couldn't hear clearly. Record again?"
 
 ---
 
@@ -134,21 +132,9 @@ User Copies or Views History
 ```
 
 **Backend Actions:**
-- Call IndicBERT intent detector
-- Extract:
-  ```json
-  {
-    "task": "Create marketing plan",
-    "format": "bullet_points",
-    "domain": "marketing",
-    "constraints": {
-      "audience": "gym_owners",
-      "tone": "professional"
-    }
-  }
-  ```
+- Call Gemini API for intent extraction
+- Extract intent details (task, format, domain, constraints)
 - Get confidence: 0.92 (92%)
-- Emit Socket.io: `intent_detected`
 
 ---
 
@@ -182,7 +168,6 @@ User Copies or Views History
 **System Actions:**
 - NO EXECUTION WITHOUT CONFIRMATION
 - Log decision: `intent_confirmed = true`
-- Emit Socket.io: `ready_to_optimize`
 
 ---
 
@@ -205,20 +190,9 @@ User Copies or Views History
 
 **Backend Actions:**
 - Call Gemini API (temperature=0)
-- Optimize:
-  ```
-  Input:  "Ek marketing plan bana do for gym app like you know 
-           make it really detailed"
-           → 35 tokens
-  
-  Output: "You are a marketing strategist for gyms. 
-           Create a 3-step marketing plan. 
-           Format: bullet points. 
-           Constraint: under 100 words."
-           → 18 tokens
-  ```
-- Calculate reduction: (35-18)/35 = 48.6%
-- Emit Socket.io: `optimization_complete`
+- Optimize the prompt
+- Calculate token reduction percentage
+- Return final result to frontend
 
 ---
 
@@ -404,42 +378,6 @@ Success → Show optimized prompt
 
 ---
 
-## 5. REAL-TIME STATUS INDICATORS
-
-### Socket.io Events Timeline
-
-```
-[User Uploads] 
-   → voice_received (1s)
-   → transcribing (0.2s) 
-   → transcription_complete (2-3s total)
-   
-[Extract Intent]
-   → intent_detected (0.5s)
-   → ready_for_confirmation (3.5s total)
-
-[User Confirms]
-   → optimizing (0.1s)
-   → optimization_complete (2s total)
-
-[Show Result]
-   → memory_suggestion (optional)
-   → ready_for_save (5s total end-to-end)
-```
-
-### UI Progress Indicator
-```
-1. 🎤 Recording        [████░░░░░░] 10%
-2. ⏳ Uploading        [████░░░░░░] 20%
-3. 📝 Transcribing     [████████░░] 50%
-4. 🔍 Analyzing Intent [█████████░] 70%
-5. ✋ Awaiting Confirm  [██████████] 90%
-6. 🤖 Optimizing       [██████████] 95%
-7. ✅ Complete         [██████████] 100%
-```
-
----
-
 ## 6. EDGE CASES & RECOVERY
 
 ### Case 1: User Closes Browser During Processing
@@ -451,9 +389,9 @@ Success → Show optimized prompt
 
 ### Case 2: Network Disconnect
 **Expected Behavior:**
-- WebSocket detects disconnect
-- UI shows: "Connection lost. Reconnecting..."
-- Automatic reconnection in 3-5 seconds
+- HTTP request fails or times out
+- UI shows: "Connection lost. Retry?"
+- User can manually retry the action
 - Resume from last known state
 
 ### Case 3: User Rejects Confirmation Multiple Times

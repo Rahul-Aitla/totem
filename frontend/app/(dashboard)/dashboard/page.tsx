@@ -23,8 +23,15 @@ import {
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
+import { 
+  uploadVoice, 
+  extractIntent, 
+  confirmIntent as apiConfirmIntent, 
+  optimizePrompt as apiOptimizePrompt 
+} from '@/lib/api';
+
 // --- Types ---
-type WorkflowState = 'idle' | 'listening' | 'processing' | 'confirming' | 'optimizing' | 'completed';
+type WorkflowState = 'idle' | 'recording' | 'processing' | 'confirming' | 'optimizing' | 'completed';
 
 interface PipelineStep {
   id: string;
@@ -33,25 +40,14 @@ interface PipelineStep {
   data?: any;
 }
 
-// --- Mock Data ---
-const MOCK_TRANSCRIPT = "Hey, I need a marketing plan for my new fitness app. It should focus on high-intensity interval training and target busy professionals. Keep it under 100 words and use bullet points.";
-
-const MOCK_INTENT = {
-  task: "Marketing Plan",
-  domain: "Fitness",
-  output: "Bullet Points",
-  constraint: "Under 100 words"
-};
-
-const MOCK_OPTIMIZED = `### Fitness App Marketing Strategy
-- **Core Focus**: High-Intensity Interval Training (HIIT) for time-constrained professionals.
-- **Value Prop**: Maximum results in minimum time via mobile-first coaching.
-- **Channels**: LinkedIn (Targeting), Strava (Community), and Spotify (Audio Ads).
-- **CTA**: "15 Minutes to Peak Performance. Start Free Today."`;
-
 export default function Dashboard() {
   const [state, setState] = useState<WorkflowState>('idle');
-  const [progress, setProgress] = useState(0);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const [voiceLogId, setVoiceLogId] = useState<string | null>(null);
+  const [intentId, setIntentId] = useState<string | null>(null);
+  const [sessionId] = useState(`session-${Math.random().toString(36).substring(7)}`);
+  
   const [steps, setSteps] = useState<PipelineStep[]>([
     { id: 'transcript', title: 'Raw Transcript', status: 'pending' },
     { id: 'language', title: 'Language Detection', status: 'pending' },
@@ -61,55 +57,105 @@ export default function Dashboard() {
     { id: 'final', title: 'Final MVP Prompt', status: 'pending' },
   ]);
 
-  const startProcessing = () => {
-    setState('listening');
-    setTimeout(() => {
-      setState('processing');
-      runPipeline();
-    }, 3000);
+  const updateStep = (id: string, status: PipelineStep['status'], data?: any) => {
+    setSteps(prev => prev.map(s => s.id === id ? { ...s, status, data } : s));
   };
 
-  const runPipeline = async () => {
-    const updateStep = (id: string, status: PipelineStep['status'], data?: any) => {
-      setSteps(prev => prev.map(s => s.id === id ? { ...s, status, data } : s));
-    };
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      setMediaRecorder(recorder);
+      setAudioChunks([]);
+      
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) setAudioChunks(prev => [...prev, e.data]);
+      };
+      
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        await handleVoiceUpload(audioBlob);
+      };
+      
+      recorder.start();
+      setState('recording');
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+    }
+  };
 
-    updateStep('transcript', 'active');
-    await wait(1500);
-    updateStep('transcript', 'completed', MOCK_TRANSCRIPT);
-    
-    updateStep('language', 'active');
-    await wait(1000);
-    updateStep('language', 'completed', { lang: 'English', confidence: 0.98 });
+  const stopRecording = () => {
+    if (mediaRecorder && state === 'recording') {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+      setState('processing');
+    }
+  };
 
-    updateStep('intent', 'active');
-    await wait(1500);
-    updateStep('intent', 'completed', MOCK_INTENT);
-    
-    setState('confirming');
+  const handleVoiceUpload = async (audioBlob: Blob) => {
+    try {
+      updateStep('transcript', 'active');
+      const result = await uploadVoice(audioBlob, sessionId);
+      setVoiceLogId(result.id);
+      
+      updateStep('transcript', 'completed', result.text);
+      updateStep('language', 'completed', { lang: result.language, confidence: result.confidence });
+      
+      // Auto-start intent extraction
+      await handleIntentExtraction(result.id);
+    } catch (err) {
+      updateStep('transcript', 'failed', err instanceof Error ? err.message : 'Upload failed');
+    }
+  };
+
+  const handleIntentExtraction = async (vLogId: string) => {
+    try {
+      updateStep('intent', 'active');
+      const result = await extractIntent(vLogId);
+      setIntentId(result.id);
+      updateStep('intent', 'completed', {
+        task: result.extracted_task,
+        domain: result.domain,
+        format: result.format,
+        constraints: JSON.stringify(result.constraints)
+      });
+      setState('confirming');
+    } catch (err) {
+      updateStep('intent', 'failed', err instanceof Error ? err.message : 'Extraction failed');
+    }
   };
 
   const confirmIntent = async () => {
-    setState('optimizing');
-    const updateStep = (id: string, status: PipelineStep['status'], data?: any) => {
-      setSteps(prev => prev.map(s => s.id === id ? { ...s, status, data } : s));
-    };
+    if (!intentId) return;
+    try {
+      setState('optimizing');
+      updateStep('confirm', 'completed');
+      
+      // Real confirmation call
+      await apiConfirmIntent(intentId);
+      
+      updateStep('optimize', 'active');
+      const result = await apiOptimizePrompt(intentId);
+      
+      updateStep('optimize', 'completed', { 
+        reduction: `${result.reduction_percentage.toFixed(0)}%`, 
+        tokens: result.optimized_tokens 
+      });
 
-    updateStep('confirm', 'completed');
-    updateStep('optimize', 'active');
-    await wait(2000);
-    updateStep('optimize', 'completed', { reduction: '72%', tokens: 121 });
-
-    updateStep('final', 'active');
-    await wait(1000);
-    updateStep('final', 'completed', MOCK_OPTIMIZED);
-    
-    setState('completed');
+      updateStep('final', 'active');
+      updateStep('final', 'completed', result.optimized_prompt);
+      
+      setState('completed');
+    } catch (err) {
+      updateStep('optimize', 'failed', err instanceof Error ? err.message : 'Optimization failed');
+    }
   };
 
   const reset = () => {
     setState('idle');
     setSteps(steps.map(s => ({ ...s, status: 'pending', data: undefined })));
+    setVoiceLogId(null);
+    setIntentId(null);
   };
 
   return (
@@ -137,9 +183,13 @@ export default function Dashboard() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8 max-w-5xl mx-auto w-full">
-          {state === 'idle' || state === 'listening' ? (
+          {state === 'idle' || state === 'recording' ? (
             <div className="h-full flex flex-col items-center justify-center gap-12 py-20">
-              <VoiceOrb state={state} onClick={startProcessing} />
+              <VoiceOrb 
+                state={state} 
+                onStart={startRecording} 
+                onStop={stopRecording} 
+              />
               <div className="text-center space-y-4">
                 <h3 className="text-3xl font-display font-bold">
                   {state === 'idle' ? 'Ready to optimize' : 'Listening to intent...'}
@@ -222,9 +272,14 @@ export default function Dashboard() {
 
 // --- Sub-components ---
 
-function VoiceOrb({ state, onClick }: { state: WorkflowState, onClick: () => void }) {
+function VoiceOrb({ state, onStart, onStop }: { state: WorkflowState, onStart: () => void, onStop: () => void }) {
+  const handleClick = () => {
+    if (state === 'idle') onStart();
+    else if (state === 'recording') onStop();
+  };
+
   return (
-    <div className="relative group cursor-pointer" onClick={onClick}>
+    <div className="relative group cursor-pointer" onClick={handleClick}>
       {/* Outer Glowing Rings */}
       <motion.div 
         className="absolute -inset-12 border border-primary-accent/10 rounded-full"
@@ -241,7 +296,7 @@ function VoiceOrb({ state, onClick }: { state: WorkflowState, onClick: () => voi
       <motion.div 
         className={cn(
           "w-48 h-48 rounded-full flex items-center justify-center relative z-10 overflow-hidden",
-          state === 'listening' ? "bg-primary-accent/20" : "bg-primary-accent/10"
+          state === 'recording' ? "bg-primary-accent/20" : "bg-primary-accent/10"
         )}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
@@ -260,7 +315,7 @@ function VoiceOrb({ state, onClick }: { state: WorkflowState, onClick: () => voi
             </motion.div>
           ) : (
             <motion.div
-              key="listening"
+              key="recording"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -287,7 +342,7 @@ function VoiceOrb({ state, onClick }: { state: WorkflowState, onClick: () => voi
         </AnimatePresence>
 
         {/* Pulse effect */}
-        {state === 'listening' && (
+        {state === 'recording' && (
           <motion.div 
             className="absolute inset-0 bg-primary-accent/30 rounded-full"
             animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
@@ -304,6 +359,17 @@ function VoiceOrb({ state, onClick }: { state: WorkflowState, onClick: () => voi
           transition={{ duration: 2, repeat: Infinity }}
         >
           Click to start engine
+        </motion.div>
+      )}
+      
+      {/* Click to stop label */}
+      {state === 'recording' && (
+        <motion.div 
+          className="absolute -bottom-12 left-1/2 -translate-x-1/2 text-secondary-accent text-[11px] font-bold uppercase tracking-[0.3em]"
+          animate={{ opacity: [0.4, 1, 0.4] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        >
+          Click to stop engine
         </motion.div>
       )}
     </div>

@@ -87,8 +87,8 @@ CREATE TABLE intents (
   audience VARCHAR(255),
   
   -- Confidence & Quality
-  intent_confidence DECIMAL(5,4),            -- NLP model confidence
-  extraction_method VARCHAR(50),             -- "indicbert", "gemini"
+  intent_confidence DECIMAL(5,4),            -- Gemini confidence
+  extraction_method VARCHAR(50) DEFAULT 'gemini',
   
   -- User Confirmation (CRITICAL)
   user_confirmed BOOLEAN DEFAULT FALSE,
@@ -251,7 +251,7 @@ CREATE TABLE decision_logs (
   decision_type VARCHAR(50),                 -- 'system', 'user', 'automatic'
   
   -- Reasoning (Semi-structured)
-  reasoning JSONB,                           -- Why: {confidence: 0.92, model: 'indicbert'}
+  reasoning JSONB,                           -- Why: {confidence: 0.92, model: 'gemini'}
   metadata JSONB,                            -- Additional context
   
   -- Metrics

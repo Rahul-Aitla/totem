@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+pydantic
+pydantic-settings
+google-generativeai
+python-multipart
+deepgram-sdk
+python-dotenv

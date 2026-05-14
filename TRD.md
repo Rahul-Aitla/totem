@@ -16,11 +16,9 @@
 | **Frontend** | Next.js 14 + TypeScript | SSR, API routes, best DX |
 | **Backend** | FastAPI (Python) | Async, built for ML, clean API docs |
 | **STT** | Deepgram API | 99.5% accuracy, native Hinglish |
-| **Intent** | IndicBERT (HuggingFace) | Multilingual, open-source |
-| **LLM** | Gemini API | Deterministic (temp=0), free tier |
+| **Intent/LLM** | Gemini API | Multilingual, deterministic extraction & optimization |
 | **Database** | PostgreSQL 16 | Relational, full-text search, JSON support |
 | **Hosting** | Vercel + Railway | Serverless + managed containers |
-| **Real-time** | Socket.io | WebSocket with fallbacks |
 | **Visualization** | Vis.js | Network graphs, interactive |
 
 ---
@@ -37,11 +35,8 @@
 │  ├─ PromptDisplay                                               │
 │  ├─ GraphVisualization (Vis.js)                                 │
 │  └─ ChatHistory + Analytics                                     │
-│                                                                 │
-│  SocketIO Client (Real-time updates)                            │
 └──────────────────────┬──────────────────────────────────────────┘
                        │ HTTPS
-                       │ WebSocket
 ┌──────────────────────▼──────────────────────────────────────────┐
 │                  BACKEND API (Railway)                          │
 ├─────────────────────────────────────────────────────────────────┤
@@ -49,19 +44,18 @@
 │  ├─ Router: /api/voice                                          │
 │  │  └─ POST /upload → Deepgram STT → confidence check           │
 │  ├─ Router: /api/intent                                         │
-│  │  └─ POST /detect → IndicBERT extraction + confirmation       │
+│  │  └─ POST /detect → Gemini extraction + confirmation           │
 │  ├─ Router: /api/prompt                                         │
-│  │  └─ POST /optimize → Gemini LLM + token counter              │
+│  │  └─ POST /optimize → Gemini optimization + token counter      │
 │  ├─ Router: /api/memory                                         │
 │  │  └─ CRUD operations + merge logic                            │
 │  ├─ Router: /api/graph                                          │
 │  │  └─ GET /path → decision path visualization                  │
-│  └─ WebSocket: /ws → real-time streaming                        │
 │                                                                 │
 │  Services:                                                       │
 │  ├─ stt_service.py (Deepgram wrapper)                           │
-│  ├─ intent_detector.py (IndicBERT model)                        │
-│  ├─ prompt_optimizer.py (Gemini API)                            │
+│  ├─ intent_detector.py (Gemini-based)                           │
+│  ├─ prompt_optimizer.py (Gemini-based)                          │
 │  ├─ memory_allocator.py (smart context)                         │
 │  ├─ noise_filter.py (text cleanup)                              │
 │  └─ validation_layer.py (QA checks)                             │
@@ -71,8 +65,7 @@
 │                  EXTERNAL APIs                                  │
 ├─────────────────────────────────────────────────────────────────┤
 │  ├─ Deepgram API (STT: <200ms latency)                          │
-│  ├─ Google Gemini API (LLM: 60 req/min free)                    │
-│  └─ HuggingFace Models (IndicBERT: self-hosted)                 │
+│  └─ Google Gemini API (LLM: 60 req/min free)                    │
 └──────────────────────┬──────────────────────────────────────────┘
                        │ 
 ┌──────────────────────▼──────────────────────────────────────────┐
@@ -125,13 +118,11 @@ frontend/
 │   └── Footer.tsx                # Footer
 │
 ├── services/                      # API client layer
-│   ├── socketService.ts          # Socket.io wrapper
 │   ├── apiService.ts             # HTTP client (axios)
 │   └── types.ts                  # Shared types
 │
 ├── hooks/                         # Custom React hooks
 │   ├── useVoiceRecorder.ts       # Recording logic
-│   ├── useRealtime.ts            # WebSocket hooks
 │   ├── usePromptOptimization.ts  # Optimization flow
 │   └── useMemory.ts              # Memory management
 │
@@ -167,7 +158,6 @@ frontend/
 - Display waveform visualization (RecordRTC)
 - Show recording status
 - Upload encoded audio to backend
-- Emit real-time updates via Socket.io
 
 // Props:
 {
@@ -209,21 +199,6 @@ frontend/
   optimizedTokens: number
   reductionPercentage: number
 }
-```
-
-### 3.3 Real-time Communication
-
-```typescript
-// Socket.io events (Frontend listening):
-socket.on('voice_received', (data) => {})           // Upload confirmed
-socket.on('transcribing', (data) => {})             // STT in progress
-socket.on('transcription_complete', (text) => {})   // STT result
-socket.on('intent_detected', (intent) => {})        // Intent extracted
-socket.on('optimizing', () => {})                   // LLM in progress
-socket.on('optimization_complete', (result) => {})  // LLM output
-socket.on('memory_update', (memory) => {})          // Memory changed
-socket.on('error', (error) => {})                   // Error message
-```
 
 ---
 
@@ -245,8 +220,7 @@ backend/
 │   │   ├── intent.py             # POST /api/intent/detect, confirm
 │   │   ├── prompt.py             # POST /api/prompt/optimize
 │   │   ├── memory.py             # CRUD /api/memory/*
-│   │   ├── graph.py              # GET /api/graph/path
-│   │   └── websocket.py          # WebSocket /ws
+│   │   └── graph.py              # GET /api/graph/path
 │   │
 │   ├── services/
 │   │   ├── stt_service.py        # Deepgram STT wrapper
@@ -298,7 +272,7 @@ class DeepgramSTTService:
 #### Intent Detector (intent_detector.py)
 ```python
 class IntentDetector:
-    - extract_intent(text) → Intent
+    - extract_intent(text) → Intent (via Gemini API)
     - extract_entities(text) → {task, format, constraints, domain}
     - get_confidence() → 0-100%
     - validate_intent() → bool
@@ -307,7 +281,7 @@ class IntentDetector:
 #### Prompt Optimizer (prompt_optimizer.py)
 ```python
 class PromptOptimizer:
-    - optimize(intent) → OptimizedPrompt
+    - optimize(intent) → OptimizedPrompt (via Gemini API)
     - inject_role(role) → enhanced_prompt
     - apply_constraints(constraints) → formatted_prompt
     - measure_token_reduction() → percentage
@@ -555,10 +529,9 @@ DELETE /api/memory/{id}
 | Metric | Target | Implementation |
 |--------|--------|-----------------|
 | STT latency | <200ms | Deepgram real-time streaming |
-| Intent detection | <500ms | Local IndicBERT model |
-| LLM optimization | <2s | Gemini API (parallelized) |
+| Intent detection | <500ms | Gemini API |
+| LLM optimization | <2s | Gemini API |
 | Total pipeline | <5s | All sequential + display |
-| WebSocket update | <100ms | Socket.io with binary encoding |
 | Database query | <100ms | Indexes + connection pooling |
 
 ---
