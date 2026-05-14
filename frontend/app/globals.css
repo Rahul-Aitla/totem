@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+}
+
+:root {
+  --background: #050505;
+  --foreground: #ffffff;
+  --secondary: #0B1020;
+  --elevated: #111827;
+  --border: rgba(255, 255, 255, 0.08);
+  --primary-accent: #7CFF6B;
+  --secondary-accent: #38BDF8;
+  --purple: #8B5CF6;
+  --warning: #F59E0B;
+  --success: #22C55E;
+  --error: #FF5D5D;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-secondary: var(--secondary);
+  --color-elevated: var(--elevated);
+  --color-border: var(--border);
+  --color-primary-accent: var(--primary-accent);
+  --color-secondary-accent: var(--secondary-accent);
+  --color-purple: var(--purple);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-error: var(--error);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --radius-full: 999px;
+
+  --animate-glow: glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 0 5px var(--primary-accent), 0 0 10px var(--primary-accent);
+  }
+  to {
+    box-shadow: 0 0 20px var(--primary-accent), 0 0 30px var(--primary-accent);
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-color: #050505;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-elevated/40 backdrop-blur-xl border border-border;
+  }
+  
+  .premium-card {
+    @apply bg-elevated/20 border border-border rounded-lg transition-all duration-300 hover:border-white/20 hover:bg-elevated/30;
+  }
+}
