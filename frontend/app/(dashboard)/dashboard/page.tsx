@@ -31,7 +31,7 @@ import {
 } from '@/lib/api';
 
 // --- Types ---
-type WorkflowState = 'idle' | 'recording' | 'processing' | 'confirming' | 'optimizing' | 'completed';
+type WorkflowState = 'idle' | 'recording' | 'recorded' | 'processing' | 'confirming' | 'optimizing' | 'completed';
 
 interface PipelineStep {
   id: string;
@@ -49,7 +49,12 @@ export default function Dashboard() {
   const [sessionId, setSessionId] = useState<string>('');
   
   useEffect(() => {
-    setSessionId(`session-${Math.random().toString(36).substring(7)}`);
+    let sid = localStorage.getItem('totem_session_id');
+    if (!sid) {
+      sid = `session-${Math.random().toString(36).substring(7)}`;
+      localStorage.setItem('totem_session_id', sid);
+    }
+    setSessionId(sid);
   }, []);
   
   const [steps, setSteps] = useState<PipelineStep[]>([
@@ -61,15 +66,35 @@ export default function Dashboard() {
     { id: 'final', title: 'Final MVP Prompt', status: 'pending' },
   ]);
 
+  const [metrics, setMetrics] = useState({
+    confidence: 0,
+    language: 'None',
+    reduction: 0,
+    originalTokens: 0,
+    optimizedTokens: 0
+  });
+
   const updateStep = (id: string, status: PipelineStep['status'], data?: any) => {
     setSteps(prev => prev.map(s => s.id === id ? { ...s, status, data } : s));
+    
+    // Update metrics based on step data
+    if (status === 'completed') {
+      if (id === 'language') {
+        setMetrics(prev => ({ ...prev, language: data.lang, confidence: data.confidence * 100 }));
+      }
+      if (id === 'optimize') {
+        const reductionNum = parseFloat(data.reduction.replace('%', ''));
+        setMetrics(prev => ({ ...prev, reduction: reductionNum, optimizedTokens: data.tokens }));
+      }
+    }
   };
+
+  const [lastAudioBlob, setLastAudioBlob] = useState<Blob | null>(null);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
-      // Determine supported mime type
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
         ? 'audio/webm' 
         : 'audio/ogg';
@@ -77,29 +102,17 @@ export default function Dashboard() {
       const recorder = new MediaRecorder(stream, { mimeType });
       setMediaRecorder(recorder);
       
-      // Use a local array to collect chunks instead of state to avoid closure issues
       const chunks: Blob[] = [];
-      
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunks.push(e.data);
-        }
+        if (e.data.size > 0) chunks.push(e.data);
       };
       
-      recorder.onstop = async () => {
-        // Use the collected chunks directly
+      recorder.onstop = () => {
         const audioBlob = new Blob(chunks, { type: mimeType });
-        console.log(`Final Blob size: ${audioBlob.size} bytes`);
-        
-        if (audioBlob.size > 0) {
-          await handleVoiceUpload(audioBlob);
-        } else {
-          updateStep('transcript', 'failed', 'Recording is empty. Please speak into the mic.');
-          setState('idle');
-        }
+        setLastAudioBlob(audioBlob);
+        setState('recorded');
       };
       
-      // Request data every 100ms to ensure chunks are captured
       recorder.start(100);
       setState('recording');
     } catch (err) {
@@ -111,8 +124,19 @@ export default function Dashboard() {
     if (mediaRecorder && state === 'recording') {
       mediaRecorder.stop();
       mediaRecorder.stream.getTracks().forEach(track => track.stop());
-      setState('processing');
     }
+  };
+
+  const uploadAndProcess = async () => {
+    if (!lastAudioBlob) return;
+    setState('processing');
+    await handleVoiceUpload(lastAudioBlob);
+  };
+
+  const reRecord = () => {
+    setLastAudioBlob(null);
+    setState('idle');
+    startRecording();
   };
 
   const handleVoiceUpload = async (audioBlob: Blob) => {
@@ -136,14 +160,26 @@ export default function Dashboard() {
       updateStep('intent', 'active');
       const result = await extractIntent(vLogId);
       setIntentId(result.intent_id);
+      
+      const confidence = result.intent.confidence || 0;
       updateStep('intent', 'completed', {
         task: result.intent.task,
         domain: result.intent.domain,
         format: result.intent.format,
+        confidence: `${(confidence * 100).toFixed(1)}%`,
         constraints: JSON.stringify(result.intent.constraints)
       });
+
+      if (confidence < 0.6) {
+        // High ambiguity - show warning but allow proceeding
+        updateStep('confirm', 'active', { 
+          warning: "The system is not very confident about this intent. Please review carefully before proceeding." 
+        });
+      } else {
+        updateStep('confirm', 'active');
+      }
+      
       setState('confirming');
-      updateStep('confirm', 'active');
     } catch (err) {
       updateStep('intent', 'failed', err instanceof Error ? err.message : 'Extraction failed');
     }
@@ -207,22 +243,50 @@ export default function Dashboard() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8 max-w-5xl mx-auto w-full">
-          {state === 'idle' || state === 'recording' ? (
+          {state === 'idle' || state === 'recording' || state === 'recorded' ? (
             <div className="h-full flex flex-col items-center justify-center gap-12 py-20">
               <VoiceOrb 
                 state={state} 
                 onStart={startRecording} 
                 onStop={stopRecording} 
               />
-              <div className="text-center space-y-4">
-                <h3 className="text-3xl font-display font-bold">
-                  {state === 'idle' ? 'Ready to optimize' : 'Listening to intent...'}
-                </h3>
-                <p className="text-white/40 max-w-md mx-auto">
-                  {state === 'idle' 
-                    ? 'Click the engine core to start recording your voice input. We will transform your messy thoughts into deterministic prompts.'
-                    : 'System is capturing your voice. Speak clearly about your task, domain, and specific constraints.'}
-                </p>
+              <div className="text-center space-y-6">
+                <div className="space-y-4">
+                  <h3 className="text-3xl font-display font-bold">
+                    {state === 'idle' ? 'Ready to optimize' : state === 'recording' ? 'Listening to intent...' : 'Voice Captured'}
+                  </h3>
+                  <p className="text-white/40 max-w-md mx-auto">
+                    {state === 'idle' 
+                      ? 'Click the engine core to start recording your voice input. We will transform your messy thoughts into deterministic prompts.'
+                      : state === 'recording'
+                      ? 'System is capturing your voice. Speak clearly about your task, domain, and specific constraints.'
+                      : 'Your voice input has been recorded and is ready for processing.'}
+                  </p>
+                </div>
+
+                {state === 'recorded' && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex gap-4 justify-center"
+                  >
+                    <Button 
+                      onClick={uploadAndProcess} 
+                      className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8 h-12 rounded-full"
+                    >
+                      <Zap className="w-4 h-4 mr-2" />
+                      Process Voice
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={reRecord}
+                      className="border-white/10 hover:bg-white/5 h-12 px-8 rounded-full"
+                    >
+                      <RotateCcw className="w-4 h-4 mr-2" />
+                      Re-record
+                    </Button>
+                  </motion.div>
+                )}
               </div>
             </div>
           ) : (
@@ -246,25 +310,31 @@ export default function Dashboard() {
           <h3 className="text-[11px] font-bold uppercase tracking-widest text-white/40 mb-6">Real-time Insights</h3>
           
           <div className="space-y-6">
-            <InsightCard label="Confidence Score" value="98.4%" subValue="High Signal" icon={ShieldCheck} color="text-primary-accent" />
-            <InsightCard label="Detected Language" value="English" subValue="Region: US-East" icon={Languages} color="text-secondary-accent" />
+            <InsightCard 
+              label="Confidence Score" 
+              value={`${metrics.confidence.toFixed(1)}%`} 
+              subValue={metrics.confidence > 80 ? "High Signal" : metrics.confidence > 50 ? "Medium Signal" : "Low Signal"} 
+              icon={ShieldCheck} 
+              color={metrics.confidence > 80 ? "text-primary-accent" : metrics.confidence > 50 ? "text-warning" : "text-red-400"} 
+            />
+            <InsightCard label="Detected Language" value={metrics.language} subValue="Auto-detected" icon={Languages} color="text-secondary-accent" />
             <InsightCard label="Latency" value="240ms" subValue="Optimized Path" icon={Zap} color="text-warning" />
             
             <div className="p-4 rounded-xl bg-elevated/40 border border-border/50">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-xs font-bold text-white/60">Token Reduction</span>
-                <span className="text-xs font-bold text-primary-accent">-72%</span>
+                <span className="text-xs font-bold text-primary-accent">-{metrics.reduction.toFixed(0)}%</span>
               </div>
               <div className="relative h-2 w-full bg-white/5 rounded-full overflow-hidden">
                 <motion.div 
                   initial={{ width: 0 }}
-                  animate={{ width: state === 'completed' ? '72%' : '0%' }}
+                  animate={{ width: `${metrics.reduction}%` }}
                   className="absolute h-full bg-primary-accent" 
                 />
               </div>
               <div className="flex justify-between mt-2 text-[10px] text-white/30">
-                <span>438 Tokens</span>
-                <span>121 Tokens</span>
+                <span>{Math.round(metrics.optimizedTokens / (1 - metrics.reduction/100) || 0)} Tokens</span>
+                <span>{metrics.optimizedTokens} Tokens</span>
               </div>
             </div>
           </div>
@@ -319,8 +389,9 @@ function VoiceOrb({ state, onStart, onStop }: { state: WorkflowState, onStart: (
       {/* Main Orb */}
       <motion.div 
         className={cn(
-          "w-48 h-48 rounded-full flex items-center justify-center relative z-10 overflow-hidden",
-          state === 'recording' ? "bg-primary-accent/20" : "bg-primary-accent/10"
+          "w-48 h-48 rounded-full flex items-center justify-center relative z-10 overflow-hidden transition-colors duration-500",
+          state === 'recording' ? "bg-primary-accent/20" : 
+          state === 'recorded' ? "bg-secondary-accent/20" : "bg-primary-accent/10"
         )}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
@@ -331,36 +402,45 @@ function VoiceOrb({ state, onStart, onStop }: { state: WorkflowState, onStart: (
           {state === 'idle' ? (
             <motion.div
               key="idle"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
             >
               <Mic2 className="w-16 h-16 text-primary-accent" />
             </motion.div>
-          ) : (
+          ) : state === 'recording' ? (
             <motion.div
               key="recording"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="flex items-center gap-1"
+              className="flex items-center gap-1.5 h-16"
             >
-              {[1, 2, 3, 4, 5].map((i) => (
+              {[...Array(12)].map((_, i) => (
                 <motion.div
                   key={i}
                   className="w-1.5 bg-primary-accent rounded-full"
                   animate={{ 
-                    height: [20, 60, 20],
+                    height: [10, Math.random() * 40 + 20, 10],
                     opacity: [0.4, 1, 0.4]
                   }}
                   transition={{ 
-                    duration: 0.8, 
+                    duration: 0.5 + Math.random() * 0.5, 
                     repeat: Infinity, 
-                    delay: i * 0.1,
+                    delay: i * 0.05,
                     ease: "easeInOut"
                   }}
                 />
               ))}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="recorded"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+            >
+              <CheckCircle2 className="w-16 h-16 text-secondary-accent" />
             </motion.div>
           )}
         </AnimatePresence>
@@ -375,27 +455,30 @@ function VoiceOrb({ state, onStart, onStop }: { state: WorkflowState, onStart: (
         )}
       </motion.div>
 
-      {/* Click to start label */}
-      {state === 'idle' && (
-        <motion.div 
-          className="absolute -bottom-12 left-1/2 -translate-x-1/2 text-primary-accent text-[11px] font-bold uppercase tracking-[0.3em]"
-          animate={{ opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          Click to start engine
-        </motion.div>
-      )}
-      
-      {/* Click to stop label */}
-      {state === 'recording' && (
-        <motion.div 
-          className="absolute -bottom-12 left-1/2 -translate-x-1/2 text-secondary-accent text-[11px] font-bold uppercase tracking-[0.3em]"
-          animate={{ opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 2, repeat: Infinity }}
-        >
-          Click to stop engine
-        </motion.div>
-      )}
+      {/* Labels */}
+      <AnimatePresence>
+        {state === 'idle' && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute -bottom-12 left-1/2 -translate-x-1/2 text-primary-accent text-[11px] font-bold uppercase tracking-[0.3em] whitespace-nowrap"
+          >
+            Click to start engine
+          </motion.div>
+        )}
+        
+        {state === 'recording' && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute -bottom-12 left-1/2 -translate-x-1/2 text-secondary-accent text-[11px] font-bold uppercase tracking-[0.3em] whitespace-nowrap"
+          >
+            Click to stop engine
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -483,11 +566,19 @@ function PipelineCard({ step, index, onConfirm }: { step: PipelineStep, index: n
             )}
             {(step.id === 'confirm' && (step.status === 'active' || step.status === 'completed')) && (
               <div className="flex flex-col gap-6">
-                <p className="text-sm text-white/60">
-                  {step.status === 'completed' 
-                    ? "Intent confirmed. Generating optimized prompt..." 
-                    : "Please confirm the extracted intent before we begin deterministic optimization."}
-                </p>
+                <div className="space-y-2">
+                  <p className="text-sm text-white/60">
+                    {step.status === 'completed' 
+                      ? "Intent confirmed. Generating optimized prompt..." 
+                      : "Please confirm the extracted intent before we begin deterministic optimization."}
+                  </p>
+                  {step.data?.warning && (
+                    <div className="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning/20">
+                      <Info className="w-4 h-4 text-warning" />
+                      <p className="text-xs text-warning">{step.data.warning}</p>
+                    </div>
+                  )}
+                </div>
                 {step.status === 'active' && (
                   <div className="flex gap-3">
                     <Button onClick={onConfirm} className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8">
@@ -518,8 +609,23 @@ function PipelineCard({ step, index, onConfirm }: { step: PipelineStep, index: n
               </div>
             )}
             {step.id === 'final' && (
-              <div className="bg-elevated/50 border border-white/5 rounded-xl p-6 font-mono text-sm text-primary-accent/90 leading-relaxed whitespace-pre-wrap">
-                {step.data}
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg bg-white/5 border border-white/10 font-mono text-sm text-white/90 leading-relaxed whitespace-pre-wrap">
+                  {step.data}
+                </div>
+                <div className="flex gap-3">
+                  <Button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(step.data);
+                    }}
+                    className="bg-secondary-accent text-background hover:bg-secondary-accent/90 font-bold"
+                  >
+                    Copy to Clipboard
+                  </Button>
+                  <Button variant="outline" className="border-white/10 hover:bg-white/5">
+                    Save as Template
+                  </Button>
+                </div>
               </div>
             )}
           </div>

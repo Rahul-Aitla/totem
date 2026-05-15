@@ -8,23 +8,34 @@ class IntentDetector:
         self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
         self.model_id = 'gemini-3-flash-preview'
     
-    def extract_intent(self, text: str):
+    def extract_intent(self, text: str, context: str = ""):
         """
-        Extract intent from text using Gemini
+        Extract intent from text using Gemini.
+        Handles English, Hindi, and Hinglish.
         Returns: {task, format, domain, constraints, confidence}
         """
+        context_section = f"\nRelevant memory context:\n{context}" if context else ""
+        
         prompt = f"""
-        Extract the user's intent from the following text (which may be in English, Hindi, or Hinglish).
+        Extract the user's intent from the following text. 
+        The text may be in English, Hindi, or Hinglish (Hindi written in Roman script or mixed with English).
+        {context_section}
+        
         Text: "{text}"
         
         You MUST return a JSON object with EXACTLY these keys:
-        - "task": The main action requested string.
-        - "format": Preferred output format string (e.g., "bullet_points", "paragraph", "code").
-        - "domain": The subject area string (e.g., "marketing", "technical", "creative").
-        - "constraints": A JSON object with any specific constraints (e.g., {{"max_words": 100, "tone": "professional"}}).
-        - "confidence": A number (float) from 0.0 to 1.0.
+        - "task": A clear, concise description of the main action requested.
+        - "format": The requested output format (e.g., "bullet_points", "email", "code", "summary"). Default to "paragraph" if not specified.
+        - "domain": The context/subject area (e.g., "marketing", "technical", "personal", "finance").
+        - "constraints": A JSON object containing specific rules (e.g., {{"max_words": 50, "tone": "formal", "language": "Hindi"}}).
+        - "confidence": A number between 0.0 and 1.0 reflecting how sure you are of this extraction.
+        - "language_detected": The language used in the input (English, Hindi, or Hinglish).
         
-        CRITICAL: Ensure the JSON is complete and valid. Do not cut off the response.
+        Guidelines:
+        - If the user says "Bhai ek email likh de marketing ke liye", task is "Write a marketing email", domain is "marketing", format is "email", language_detected is "Hinglish".
+        - Be precise about constraints.
+        
+        CRITICAL: Ensure the JSON is valid and complete.
         """
         
         try:
@@ -33,7 +44,7 @@ class IntentDetector:
                 contents=prompt,
                 config={
                     'temperature': 0.0,
-                    'max_output_tokens': 2048,
+                    'max_output_tokens': 1024,
                     'response_mime_type': 'application/json',
                 }
             )

@@ -11,45 +11,76 @@ class MemoryService:
     
     def extract_and_store_memory(self, db: Session, user_session_id: str, text: str):
         """
-        Extract facts from user input and store in MemoryNode
+        Extract facts from user input and store in MemoryNode.
+        Checks for existing similar memories to avoid redundancy.
         """
+        # First, get existing memories for this session to provide as context
+        existing_memories = db.query(MemoryNode).filter(
+            MemoryNode.user_session_id == user_session_id,
+            MemoryNode.status == 'active'
+        ).all()
+        
+        existing_context = ""
+        if existing_memories:
+            existing_context = "Existing memories for this user:\n" + \
+                "\n".join([f"- ID: {m.id}, Fact: {m.fact_text}" for m in existing_memories])
+
         prompt = f"""
-        Extract key facts or preferences from the following text that might be useful for future interactions.
+        Extract key facts, preferences, or constraints from the following text.
         Text: "{text}"
         
-        Return a JSON list of facts. Each fact should have:
-        - fact_text: The extracted fact (e.g., "User prefers short bullet points").
-        - memory_type: Category (e.g., "preference", "fact", "constraint").
-        - summary: A very short summary of the fact.
+        {existing_context}
         
-        If no facts are found, return an empty list [].
+        Compare the new text with existing memories. For each new fact found:
+        1. If it's completely new, mark action as "create".
+        2. If it updates or contradicts an existing memory, mark action as "update" and provide the existing ID.
+        3. If it's already known, skip it.
+        
+        Return a JSON list of objects. Each object should have:
+        - "fact_text": The extracted fact.
+        - "memory_type": Category ("preference", "fact", "constraint").
+        - "summary": A very short summary.
+        - "action": "create" or "update".
+        - "existing_id": (Optional) The ID of the memory to update.
+        
+        If no new or updated facts are found, return an empty list [].
         ONLY return the JSON list.
         """
         
         try:
             response = self.client.models.generate_content(
                 model=self.model_id,
-                contents=prompt
+                contents=prompt,
+                config={'response_mime_type': 'application/json'}
             )
             content = response.text.strip()
-            if content.startswith("```json"):
-                content = content[7:]
-            if content.endswith("```"):
-                content = content[:-3]
+            # Robust JSON extraction
+            if "```" in content:
+                content = content.split("```")[1]
+                if content.startswith("json"):
+                    content = content[4:]
             
             facts = json.loads(content.strip())
             
             stored_nodes = []
             for fact in facts:
-                node = MemoryNode(
-                    user_session_id=user_session_id,
-                    memory_type=fact.get('memory_type', 'general'),
-                    fact_text=fact.get('fact_text'),
-                    summary=fact.get('summary'),
-                    status='active'
-                )
-                db.add(node)
-                stored_nodes.append(node)
+                if fact.get('action') == 'update' and fact.get('existing_id'):
+                    node = db.query(MemoryNode).filter(MemoryNode.id == fact['existing_id']).first()
+                    if node:
+                        node.fact_text = fact.get('fact_text')
+                        node.summary = fact.get('summary')
+                        node.memory_type = fact.get('memory_type', node.memory_type)
+                        stored_nodes.append(node)
+                elif fact.get('action') == 'create':
+                    node = MemoryNode(
+                        user_session_id=user_session_id,
+                        memory_type=fact.get('memory_type', 'general'),
+                        fact_text=fact.get('fact_text'),
+                        summary=fact.get('summary'),
+                        status='active'
+                    )
+                    db.add(node)
+                    stored_nodes.append(node)
             
             db.commit()
             return stored_nodes

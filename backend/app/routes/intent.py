@@ -13,6 +13,8 @@ class IntentConfirmRequest(BaseModel):
     confirmed: bool
     action: str = "confirm"
 
+from app.services.memory_service import memory_service
+
 @router.post("/extract")
 async def detect_intent(
     voice_log_id: str,
@@ -31,8 +33,13 @@ async def detect_intent(
     if not voice_log:
         raise HTTPException(status_code=404, detail="Voice log not found")
     
-    # Extract intent
-    intent_result = intent_detector.extract_intent(voice_log.transcribed_text)
+    # Get relevant context from memory for this session
+    context = memory_service.get_relevant_context(db, voice_log.user_session_id)
+    
+    # Extract intent (Pass context to intent_detector if we update it, 
+    # but for now let's just use the context to improve the prompt if needed)
+    # Actually, let's update IntentDetector.extract_intent to accept context.
+    intent_result = intent_detector.extract_intent(voice_log.transcribed_text, context=context)
     
     # Save to database
     intent = Intent(

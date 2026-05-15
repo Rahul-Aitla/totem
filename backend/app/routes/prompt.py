@@ -82,6 +82,13 @@ async def optimize_prompt(
         optimization_method="gemini-3-flash-preview"
     )
     db.add(prompt_record)
+    
+    # Extract and store memory from this interaction
+    try:
+        memory_service.extract_and_store_memory(db, voice_log.user_session_id, original_text)
+    except Exception as e:
+        print(f"Memory extraction failed (non-blocking): {e}")
+        
     db.commit()
     db.refresh(prompt_record)
     
