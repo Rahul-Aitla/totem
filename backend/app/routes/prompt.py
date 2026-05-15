@@ -42,19 +42,24 @@ async def optimize_prompt(
     context = memory_service.get_relevant_context(db, voice_log.user_session_id)
     
     # Optimize
-    result = prompt_optimizer.optimize(
-        {
-            'task': intent.extracted_task,
-            'format': intent.format,
-            'domain': intent.domain,
-            'constraints': intent.constraints or {}
-        },
-        original_text,
-        context=context
-    )
+    try:
+        result = prompt_optimizer.optimize(
+            {
+                'task': intent.extracted_task,
+                'format': intent.format,
+                'domain': intent.domain,
+                'constraints': intent.constraints or {}
+            },
+            original_text,
+            context=context
+        )
+    except Exception as e:
+        print(f"CRITICAL ERROR in prompt_optimizer.optimize: {e}")
+        raise HTTPException(status_code=500, detail=f"Optimization service error: {str(e)}")
     
     if result['status'] == 'failed':
-        raise HTTPException(status_code=500, detail=result['error'])
+        print(f"OPTIMIZATION FAILED: {result.get('error')}")
+        raise HTTPException(status_code=500, detail=result.get('error', 'Unknown optimization error'))
     
     # Count optimized tokens
     optimized_text = result['optimized_text']
@@ -74,7 +79,7 @@ async def optimize_prompt(
         original_token_count=original_tokens,
         optimized_token_count=optimized_tokens,
         token_reduction_percentage=reduction_pct,
-        optimization_method="gemini-1.5-flash"
+        optimization_method="gemini-3-flash-preview"
     )
     db.add(prompt_record)
     db.commit()

@@ -1,4 +1,4 @@
-import google.generativeai as genai
+from google import genai
 import json
 from sqlalchemy.orm import Session
 from app.models import MemoryNode
@@ -6,8 +6,8 @@ from app.config import settings
 
 class MemoryService:
     def __init__(self):
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        self.model_id = 'gemini-3-flash-preview'
     
     def extract_and_store_memory(self, db: Session, user_session_id: str, text: str):
         """
@@ -27,7 +27,10 @@ class MemoryService:
         """
         
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=prompt
+            )
             content = response.text.strip()
             if content.startswith("```json"):
                 content = content[7:]

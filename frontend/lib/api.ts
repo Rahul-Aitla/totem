@@ -2,7 +2,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export const uploadVoice = async (audioBlob: Blob, sessionId: string = 'anonymous') => {
   const formData = new FormData();
-  formData.append('audio', audioBlob, 'voice.wav');
+  // Use .webm extension as it's the most common for browser recordings
+  formData.append('audio', audioBlob, 'voice.webm');
   if (sessionId) formData.append('session_id', sessionId);
 
   const response = await fetch(`${API_BASE_URL}/voice/upload`, {

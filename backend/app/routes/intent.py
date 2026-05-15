@@ -5,10 +5,15 @@ from app.models import VoiceLog, Intent
 from app.database import get_db
 import uuid
 from datetime import datetime
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/intent", tags=["intent"])
 
-@router.post("/detect")
+class IntentConfirmRequest(BaseModel):
+    confirmed: bool
+    action: str = "confirm"
+
+@router.post("/extract")
 async def detect_intent(
     voice_log_id: str,
     db: Session = Depends(get_db)
@@ -56,8 +61,7 @@ async def detect_intent(
 @router.post("/confirm")
 async def confirm_intent(
     intent_id: str,
-    confirmed: bool,
-    action: str,  # 'confirm', 'reject', 'clarify'
+    request: IntentConfirmRequest,
     db: Session = Depends(get_db)
 ):
     """
@@ -72,15 +76,15 @@ async def confirm_intent(
     if not intent:
         raise HTTPException(status_code=404, detail="Intent not found")
     
-    intent.user_confirmed = confirmed
-    intent.confirmation_action = action
-    intent.status = "confirmed" if confirmed else "rejected"
+    intent.user_confirmed = request.confirmed
+    intent.confirmation_action = request.action
+    intent.status = "confirmed" if request.confirmed else "rejected"
     intent.confirmation_timestamp = datetime.utcnow()
     
     db.commit()
     
     return {
         "success": True,
-        "message": "Proceeding to optimization" if confirmed else "Intent rejected",
+        "message": "Proceeding to optimization" if request.confirmed else "Intent rejected",
         "status": intent.status
     }

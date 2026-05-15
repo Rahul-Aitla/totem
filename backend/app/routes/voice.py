@@ -22,33 +22,52 @@ async def upload_voice(
     """
     start_time = time.time()
     
-    # Ensure session exists
-    if session_id:
-        user_session = db.query(UserSession).filter(UserSession.id == session_id).first()
-        if not user_session:
-            user_session = UserSession(id=session_id)
-            db.add(user_session)
-            db.commit()
-    else:
-        session_id = "anonymous"
-    
     try:
+        # Debugging logs
+        audio_bytes = await audio.read()
+        print(f"DEBUG: Filename: {audio.filename}")
+        print(f"DEBUG: Content Type: {audio.content_type}")
+        print(f"DEBUG: Byte length: {len(audio_bytes)}")
+        
+        if len(audio_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Audio file is empty")
+        
+        # Reset file pointer after reading for saving
+        await audio.seek(0)
+
+        # Ensure session exists
+        if session_id:
+            user_session = db.query(UserSession).filter(UserSession.id == session_id).first()
+            if not user_session:
+                user_session = UserSession(id=session_id)
+                db.add(user_session)
+                db.commit()
+        else:
+            session_id = "anonymous"
+            # Ensure the anonymous session exists in the sessions table
+            user_session = db.query(UserSession).filter(UserSession.id == session_id).first()
+            if not user_session:
+                user_session = UserSession(id=session_id)
+                db.add(user_session)
+                db.commit()
+    
         # Save temp file
         temp_filename = f"{uuid.uuid4()}_{audio.filename}"
-        temp_path = os.path.join("/tmp", temp_filename) if os.name != 'nt' else os.path.join(os.getenv('TEMP', 'temp'), temp_filename)
-        
-        # Ensure temp directory exists if not system temp
-        if not os.path.exists(os.path.dirname(temp_path)):
-            os.makedirs(os.path.dirname(temp_path))
+        # Use a more reliable temp path on Windows
+        temp_dir = os.path.join(os.getcwd(), "temp_audio")
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+        temp_path = os.path.join(temp_dir, temp_filename)
             
         with open(temp_path, "wb") as f:
             f.write(await audio.read())
         
         # Transcribe with Deepgram
-        result = await stt_service.transcribe(temp_path)
+        result = await stt_service.transcribe(temp_path, mimetype=audio.content_type)
         
-        if "error" in result:
-            raise HTTPException(status_code=500, detail=result["error"])
+        if not result or "error" in result:
+            error_msg = result.get("error", "Unknown STT error") if result else "STT service returned None"
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # Check confidence
         if result['confidence'] < 0.6:

@@ -46,7 +46,11 @@ export default function Dashboard() {
   const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [voiceLogId, setVoiceLogId] = useState<string | null>(null);
   const [intentId, setIntentId] = useState<string | null>(null);
-  const [sessionId] = useState(`session-${Math.random().toString(36).substring(7)}`);
+  const [sessionId, setSessionId] = useState<string>('');
+  
+  useEffect(() => {
+    setSessionId(`session-${Math.random().toString(36).substring(7)}`);
+  }, []);
   
   const [steps, setSteps] = useState<PipelineStep[]>([
     { id: 'transcript', title: 'Raw Transcript', status: 'pending' },
@@ -64,20 +68,39 @@ export default function Dashboard() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      
+      // Determine supported mime type
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
+        ? 'audio/webm' 
+        : 'audio/ogg';
+        
+      const recorder = new MediaRecorder(stream, { mimeType });
       setMediaRecorder(recorder);
-      setAudioChunks([]);
+      
+      // Use a local array to collect chunks instead of state to avoid closure issues
+      const chunks: Blob[] = [];
       
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) setAudioChunks(prev => [...prev, e.data]);
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
       };
       
       recorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-        await handleVoiceUpload(audioBlob);
+        // Use the collected chunks directly
+        const audioBlob = new Blob(chunks, { type: mimeType });
+        console.log(`Final Blob size: ${audioBlob.size} bytes`);
+        
+        if (audioBlob.size > 0) {
+          await handleVoiceUpload(audioBlob);
+        } else {
+          updateStep('transcript', 'failed', 'Recording is empty. Please speak into the mic.');
+          setState('idle');
+        }
       };
       
-      recorder.start();
+      // Request data every 100ms to ensure chunks are captured
+      recorder.start(100);
       setState('recording');
     } catch (err) {
       console.error("Error accessing microphone:", err);
@@ -112,14 +135,15 @@ export default function Dashboard() {
     try {
       updateStep('intent', 'active');
       const result = await extractIntent(vLogId);
-      setIntentId(result.id);
+      setIntentId(result.intent_id);
       updateStep('intent', 'completed', {
-        task: result.extracted_task,
-        domain: result.domain,
-        format: result.format,
-        constraints: JSON.stringify(result.constraints)
+        task: result.intent.task,
+        domain: result.intent.domain,
+        format: result.intent.format,
+        constraints: JSON.stringify(result.intent.constraints)
       });
       setState('confirming');
+      updateStep('confirm', 'active');
     } catch (err) {
       updateStep('intent', 'failed', err instanceof Error ? err.message : 'Extraction failed');
     }
@@ -132,7 +156,7 @@ export default function Dashboard() {
       updateStep('confirm', 'completed');
       
       // Real confirmation call
-      await apiConfirmIntent(intentId);
+      await apiConfirmIntent(intentId, { confirmed: true, action: 'confirm' });
       
       updateStep('optimize', 'active');
       const result = await apiOptimizePrompt(intentId);
@@ -418,13 +442,17 @@ function PipelineCard({ step, index, onConfirm }: { step: PipelineStep, index: n
       </div>
 
       <div className="p-6 bg-white/[0.01]">
-        {step.status === 'active' ? (
+        {step.status === 'active' && step.id !== 'confirm' ? (
           <div className="h-20 flex items-center justify-center">
             <motion.div 
               className="w-12 h-12 rounded-full border-2 border-primary-accent border-t-transparent"
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
             />
+          </div>
+        ) : step.status === 'failed' ? (
+          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-sm text-red-400">Error: {step.data}</p>
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-top-2 duration-500">
@@ -453,17 +481,23 @@ function PipelineCard({ step, index, onConfirm }: { step: PipelineStep, index: n
                 ))}
               </div>
             )}
-            {step.id === 'confirm' && (
+            {(step.id === 'confirm' && (step.status === 'active' || step.status === 'completed')) && (
               <div className="flex flex-col gap-6">
-                <p className="text-sm text-white/60">Please confirm the extracted intent before we begin deterministic optimization.</p>
-                <div className="flex gap-3">
-                  <Button onClick={onConfirm} className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8">
-                    Confirm & Optimize
-                  </Button>
-                  <Button variant="outline" className="border-white/10 hover:bg-white/5">
-                    Edit Intent
-                  </Button>
-                </div>
+                <p className="text-sm text-white/60">
+                  {step.status === 'completed' 
+                    ? "Intent confirmed. Generating optimized prompt..." 
+                    : "Please confirm the extracted intent before we begin deterministic optimization."}
+                </p>
+                {step.status === 'active' && (
+                  <div className="flex gap-3">
+                    <Button onClick={onConfirm} className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8">
+                      Confirm & Optimize
+                    </Button>
+                    <Button variant="outline" className="border-white/10 hover:bg-white/5">
+                      Edit Intent
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
             {step.id === 'optimize' && (
