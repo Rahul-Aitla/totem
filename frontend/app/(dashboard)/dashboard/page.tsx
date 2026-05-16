@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Mic2, 
@@ -42,6 +42,32 @@ interface PipelineStep {
   data?: any;
 }
 
+const INITIAL_STEPS: PipelineStep[] = [
+  { id: 'transcript', title: 'Raw Transcript', status: 'pending' },
+  { id: 'language', title: 'Language Detection', status: 'pending' },
+  { id: 'intent', title: 'Intent Extraction', status: 'pending' },
+  { id: 'confirm', title: 'Confirmation Layer', status: 'pending' },
+  { id: 'optimize', title: 'Prompt Optimization', status: 'pending' },
+  { id: 'final', title: 'Final MVP Prompt', status: 'pending' },
+];
+
+const INITIAL_METRICS = {
+  confidence: 0,
+  language: 'None',
+  reduction: 0,
+  originalTokens: 0,
+  optimizedTokens: 0,
+  reasoning: '',
+  contextUsed: false,
+};
+
+const INITIAL_PERFORMANCE = {
+  stt: 0,
+  intent: 0,
+  optimize: 0,
+  total: 0,
+};
+
 export default function Dashboard() {
   const [state, setState] = useState<WorkflowState>('idle');
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
@@ -49,6 +75,7 @@ export default function Dashboard() {
   const [voiceLogId, setVoiceLogId] = useState<string | null>(null);
   const [intentId, setIntentId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string>('');
+  const activeSessionIdRef = useRef<string>('');
   
   useEffect(() => {
     let sid = localStorage.getItem('totem_session_id');
@@ -56,36 +83,35 @@ export default function Dashboard() {
       sid = `session-${Math.random().toString(36).substring(7)}`;
       localStorage.setItem('totem_session_id', sid);
     }
+    activeSessionIdRef.current = sid;
     setSessionId(sid);
   }, []);
   
-  const [steps, setSteps] = useState<PipelineStep[]>([
-    { id: 'transcript', title: 'Raw Transcript', status: 'pending' },
-    { id: 'language', title: 'Language Detection', status: 'pending' },
-    { id: 'intent', title: 'Intent Extraction', status: 'pending' },
-    { id: 'confirm', title: 'Confirmation Layer', status: 'pending' },
-    { id: 'optimize', title: 'Prompt Optimization', status: 'pending' },
-    { id: 'final', title: 'Final MVP Prompt', status: 'pending' },
-  ]);
+  const [steps, setSteps] = useState<PipelineStep[]>(INITIAL_STEPS);
 
-  const [metrics, setMetrics] = useState({
-    confidence: 0,
-    language: 'None',
-    reduction: 0,
-    originalTokens: 0,
-    optimizedTokens: 0,
-    reasoning: '',
-    contextUsed: false
-  });
+  const [metrics, setMetrics] = useState(INITIAL_METRICS);
 
   const [editingIntent, setEditingIntent] = useState<any>(null);
 
-  const [performance, setPerformance] = useState({
-    stt: 0,
-    intent: 0,
-    optimize: 0,
-    total: 0
-  });
+  const [performance, setPerformance] = useState(INITIAL_PERFORMANCE);
+
+  const createFreshSession = () => {
+    const sid = `session-${Math.random().toString(36).substring(7)}`;
+    activeSessionIdRef.current = sid;
+    localStorage.setItem('totem_session_id', sid);
+    setSessionId(sid);
+    return sid;
+  };
+
+  const resetWorkflowState = () => {
+    setSteps(INITIAL_STEPS.map(step => ({ ...step })));
+    setMetrics({ ...INITIAL_METRICS });
+    setPerformance({ ...INITIAL_PERFORMANCE });
+    setVoiceLogId(null);
+    setIntentId(null);
+    setEditingIntent(null);
+    setLastAudioBlob(null);
+  };
 
   const updateStep = (id: string, status: PipelineStep['status'], data?: any) => {
     const startTime = Date.now();
@@ -139,6 +165,8 @@ export default function Dashboard() {
         
       const recorder = new MediaRecorder(stream, { mimeType });
       setMediaRecorder(recorder);
+      createFreshSession();
+      resetWorkflowState();
       
       const chunks: Blob[] = [];
       recorder.ondataavailable = (e) => {
@@ -168,7 +196,7 @@ export default function Dashboard() {
   const uploadAndProcess = async () => {
     if (!lastAudioBlob) return;
     setState('processing');
-    await handleVoiceUpload(lastAudioBlob);
+    await handleVoiceUpload(lastAudioBlob, activeSessionIdRef.current || sessionId);
   };
 
   const reRecord = () => {
@@ -177,10 +205,10 @@ export default function Dashboard() {
     startRecording();
   };
 
-  const handleVoiceUpload = async (audioBlob: Blob) => {
+  const handleVoiceUpload = async (audioBlob: Blob, workflowSessionId: string) => {
     try {
       updateStep('transcript', 'active');
-      const result = await uploadVoice(audioBlob, sessionId);
+      const result = await uploadVoice(audioBlob, workflowSessionId);
       setVoiceLogId(result.id);
       
       updateStep('transcript', 'completed', result.text);
@@ -274,9 +302,7 @@ export default function Dashboard() {
 
   const reset = () => {
     setState('idle');
-    setSteps(steps.map(s => ({ ...s, status: 'pending', data: undefined })));
-    setVoiceLogId(null);
-    setIntentId(null);
+    resetWorkflowState();
   };
 
   const handleExport = () => {

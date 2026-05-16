@@ -90,9 +90,18 @@ function WorkflowGraphContent() {
   const [loading, setLoading] = useState(true);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
 
+  const ensureSessionId = () => {
+    let sid = localStorage.getItem('totem_session_id');
+    if (!sid) {
+      sid = `session-${Math.random().toString(36).substring(7)}`;
+      localStorage.setItem('totem_session_id', sid);
+    }
+    return sid;
+  };
+
   useEffect(() => {
     const sidFromQuery = searchParams.get('sessionId');
-    const sidFromStorage = localStorage.getItem('totem_session_id') || 'anonymous';
+    const sidFromStorage = ensureSessionId();
     const sid = sidFromQuery || sidFromStorage;
     
     setActiveSessionId(sid);
