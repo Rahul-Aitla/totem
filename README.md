@@ -153,11 +153,11 @@ Refer to the files under the folders above for implementation details.
 
 ## Screenshots
 
-> Add screenshots into `/docs` (recommended filenames): `docs/dashboard.png`, `docs/recorder.png`, `docs/graph.png`. Example markdown follows — replace files with actual images later:
-
 ![Dashboard](docs/dashboard.png)
 
-![Recorder UI](docs/recorder.png)
+![Workflow](docs/workflow.png)
+
+![User Memory](docs/memory.png)
 
 ---
 
@@ -347,8 +347,3 @@ If using pytest, install `pytest` and run `pytest` from the repository root (not
 
 ## License & Contact
 
-- Include your preferred license (add `LICENSE` file). For questions contact the repo maintainer.
-
----
-
-File created: [README.md](README.md)
