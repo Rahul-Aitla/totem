@@ -1,4 +1,15 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const DEFAULT_LOCAL_API_URL = 'http://localhost:8000';
+
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app')) {
+    return '/api';
+  }
+
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/+$/, '');
+  return configuredUrl || DEFAULT_LOCAL_API_URL;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 export const uploadVoice = async (audioBlob: Blob, sessionId: string = 'anonymous') => {
   const formData = new FormData();
