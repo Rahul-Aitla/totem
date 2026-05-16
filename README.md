@@ -1,6 +1,8 @@
-# TOTEM — Voice → Minimum VIABLE Prompt
+# TOTEM — Voice-to-Prompt Optimization Engine
 
-A voice-first pipeline that converts raw voice input into a concise, deterministic, and production-ready prompt (Minimum VIABLE Prompt). This repository contains the frontend (Next.js), backend (FastAPI), and database schema (Postgres / Supabase) used to transcribe audio, extract intent, confirm with users, optimize prompts for token efficiency, and store memory & decision logs.
+TOTEM converts raw voice input into structured, optimized AI prompts using speech-to-text, intent extraction, memory retrieval, and prompt compression. It focuses on deterministic, token-efficient prompts suitable for production LLM workflows.
+
+Built with: FastAPI • Next.js 14 • Gemini (genai) • Deepgram • PostgreSQL + pgvector
 
 ---
 
@@ -19,6 +21,18 @@ A voice-first pipeline that converts raw voice input into a concise, determinist
 - **Contributing & License**
 
 ---
+
+## Pitch
+
+TOTEM makes spoken requests usable for LLMs by:
+
+- Transcribing speech to text (Deepgram)
+- Extracting structured intent (Gemini)
+- Confirming intent with the user before execution
+- Compressing and optimizing prompts for token-efficiency (deterministic mode)
+- Storing memories and building a decision graph for auditability
+
+This README is a high-level project overview — deeper technical design and raw SQL lives in `BACKEND_SCHEMA.md` and the `/docs` folder.
 
 ## Overview
 
@@ -116,6 +130,34 @@ flowchart LR
 - **frontend/**: Next.js app, components, and `lib/api.ts` client
 
 Refer to the files under the folders above for implementation details.
+
+---
+
+## Features
+
+- Voice-to-text transcription using Deepgram
+- Intent extraction using Gemini (genai)
+- Intent confirmation UI flow
+- Prompt optimization and token reduction (deterministic / temperature=0)
+- Memory store with semantic embeddings (pgvector)
+- Decision logging and session graph visualization
+- Frontend dashboard (Next.js) for reviewing prompts, memories, and logs
+
+## Tech Stack
+
+- Frontend: Next.js 14, React 19, TailwindCSS (UI utilities)
+- Backend: FastAPI, SQLAlchemy, Uvicorn, Python 3.11
+- AI Services: Google Gemini (genai), Deepgram STT
+- Database: PostgreSQL 16 (Supabase), pgvector for embeddings
+- Hosting & Infra: Vercel (frontend), Railway/Render/Docker (backend), Supabase (DB)
+
+## Screenshots
+
+> Add screenshots into `/docs` (recommended filenames): `docs/dashboard.png`, `docs/recorder.png`, `docs/graph.png`. Example markdown follows — replace files with actual images later:
+
+![Dashboard](docs/dashboard.png)
+
+![Recorder UI](docs/recorder.png)
 
 ---
 
