@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { 
@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { listDecisionLogs } from '@/lib/api';
 
-export default function DecisionLogs() {
+function DecisionLogsContent() {
   const searchParams = useSearchParams();
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,130 +105,147 @@ export default function DecisionLogs() {
               </span>
             </div>
             <p className="text-[11px] text-white/40 uppercase font-bold tracking-widest mb-1">{stat.label}</p>
-            <h3 className="text-2xl font-display font-bold">{stat.value}</h3>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-display font-bold">{stat.value}</span>
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Main Content: Logs and Trace */}
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Loader2 className="w-12 h-12 text-primary-accent animate-spin" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Event Logs Table */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-display font-bold flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-primary-accent" />
-                System Event Logs
-              </h3>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                <input 
-                  type="text" 
-                  placeholder="Search events..." 
-                  className="w-full bg-elevated/50 border border-border rounded-xl pl-10 pr-4 py-2 text-xs focus:outline-none focus:border-primary-accent/50"
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-            
-            <div className="premium-card overflow-hidden">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/5 bg-white/[0.02]">
-                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-white/30">Timestamp</th>
-                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-white/30">Step</th>
-                    <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-white/30">Status</th>
-                    <th className="px-6 py-4"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/5">
-                  {filteredLogs.map((log) => (
-                    <tr 
-                      key={log.id} 
-                      onClick={() => setSelectedLog(log)}
-                      className={cn(
-                        "hover:bg-white/[0.01] transition-colors group cursor-pointer",
-                        selectedLog?.id === log.id && "bg-white/[0.03]"
-                      )}
-                    >
-                      <td className="px-6 py-4 text-xs font-mono text-white/40">{new Date(log.created_at).toLocaleTimeString()}</td>
-                      <td className="px-6 py-4 text-sm font-bold text-white/80">{log.step}</td>
-                      <td className="px-6 py-4">
-                        <span className={cn(
-                          "text-[10px] font-bold px-2 py-0.5 rounded",
-                          log.was_successful ? "bg-success/10 text-success" : "bg-warning/10 text-warning"
-                        )}>
-                          {log.was_successful ? 'Success' : 'Error'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <ChevronRight className="w-4 h-4 text-white/20 group-hover:text-white transition-all" />
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredLogs.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-20 text-center text-white/20">No logs found.</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+      <div className="flex-1 flex flex-col lg:flex-row gap-8 min-h-0">
+        {/* Logs List */}
+        <div className="w-full lg:w-1/2 flex flex-col gap-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+            <input 
+              type="text" 
+              placeholder="Filter logs by step or decision..." 
+              className="w-full bg-elevated/50 border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-primary-accent/50 transition-colors"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
 
-          {/* Execution Trace Sidebar */}
-          <div className="flex flex-col gap-4">
-            <h3 className="text-lg font-display font-bold flex items-center gap-2 mb-2">
-              <Activity className="w-5 h-5 text-secondary-accent" />
-              Trace Details
-            </h3>
-            {selectedLog ? (
-              <div className="premium-card p-6 flex-1 bg-gradient-to-b from-white/[0.02] to-transparent space-y-6">
-                <div>
-                  <h4 className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-2">Decision</h4>
-                  <p className="text-sm text-white/90 leading-relaxed">{selectedLog.decision}</p>
-                </div>
-                
-                {selectedLog.metrics && (
-                  <div>
-                    <h4 className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-3">Metrics</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      {Object.entries(selectedLog.metrics).map(([key, val]: [string, any]) => (
-                        <div key={key} className="p-2 rounded bg-white/5 border border-white/5">
-                          <span className="block text-[8px] text-white/30 uppercase">{key.replace('_', ' ')}</span>
-                          <span className="text-xs font-bold text-white/80">{typeof val === 'number' ? val.toFixed(1) : val}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div>
-                  <h4 className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-3">Reasoning</h4>
-                  <div className="p-4 rounded-xl bg-black/40 border border-white/5 font-mono text-[10px] text-white/40">
-                    <div className="flex items-center gap-2 mb-2 text-primary-accent">
-                      <Code className="w-3 h-3" />
-                      <span>LOG_ID: {selectedLog.id.substring(0, 8)}</span>
-                    </div>
-                    <pre className="whitespace-pre-wrap">
-                      {JSON.stringify(selectedLog.reasoning, null, 2)}
-                    </pre>
-                  </div>
-                </div>
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+            {loading ? (
+              <div className="flex items-center justify-center py-20">
+                <Loader2 className="w-8 h-8 text-primary-accent animate-spin" />
               </div>
-            ) : (
-              <div className="premium-card p-6 flex-1 flex items-center justify-center text-white/20 italic">
-                Select a log to view details
+            ) : filteredLogs.map((log) => (
+              <button
+                key={log.id}
+                onClick={() => setSelectedLog(log)}
+                className={cn(
+                  "w-full p-4 rounded-xl border text-left transition-all duration-200 group relative overflow-hidden",
+                  selectedLog?.id === log.id 
+                    ? "bg-white/5 border-primary-accent/30 shadow-[0_0_15px_rgba(124,255,107,0.05)]" 
+                    : "bg-elevated/30 border-white/5 hover:border-white/10 hover:bg-white/[0.02]"
+                )}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "w-1.5 h-1.5 rounded-full",
+                      log.step === 'STT_TRANSCRIPTION' ? "bg-cyan-400" :
+                      log.step === 'INTENT_EXTRACTION' ? "bg-amber-400" :
+                      log.step === 'PROMPT_OPTIMIZATION' ? "bg-green-400" : "bg-purple-400"
+                    )} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/40">{log.step}</span>
+                  </div>
+                  <span className="text-[10px] font-mono text-white/20">{new Date(log.created_at).toLocaleTimeString()}</span>
+                </div>
+                <p className="text-xs font-medium text-white/80 line-clamp-1">{log.decision}</p>
+                {selectedLog?.id === log.id && (
+                  <motion.div layoutId="active-log" className="absolute left-0 top-0 bottom-0 w-1 bg-primary-accent" />
+                )}
+              </button>
+            ))}
+            {!loading && filteredLogs.length === 0 && (
+              <div className="py-20 text-center border border-dashed border-white/10 rounded-2xl">
+                <p className="text-white/20">No logs found for this session.</p>
               </div>
             )}
           </div>
         </div>
-      )}
+
+        {/* Log Details */}
+        <div className="flex-1 premium-card flex flex-col overflow-hidden">
+          <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.01]">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
+                <Terminal className="w-5 h-5 text-primary-accent" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold">Execution Trace</h3>
+                <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">Trace ID: {selectedLog?.id?.substring(0, 18)}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="px-2 py-1 rounded bg-success/10 text-success text-[10px] font-bold uppercase">Verified</div>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+            {selectedLog ? (
+              <>
+                <section>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-4 flex items-center gap-2">
+                    <ChevronRight className="w-3 h-3" />
+                    System Decision
+                  </h4>
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/5">
+                    <p className="text-sm leading-relaxed text-white/90">{selectedLog.decision}</p>
+                  </div>
+                </section>
+
+                <section>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-4 flex items-center gap-2">
+                    <ChevronRight className="w-3 h-3" />
+                    AI Reasoning
+                  </h4>
+                  <div className="bg-[#0D0D0D] rounded-xl border border-white/5 p-4 font-mono text-[11px] leading-relaxed text-primary-accent/80">
+                    <pre className="whitespace-pre-wrap">
+                      {JSON.stringify(selectedLog.reasoning, null, 2)}
+                    </pre>
+                  </div>
+                </section>
+
+                <section>
+                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-4 flex items-center gap-2">
+                    <ChevronRight className="w-3 h-3" />
+                    Performance Metrics
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    {Object.entries(selectedLog.metrics || {}).map(([key, val]: any) => (
+                      <div key={key} className="p-3 rounded-lg bg-white/[0.02] border border-white/5">
+                        <p className="text-[9px] text-white/30 uppercase font-bold mb-1">{key.replace('_', ' ')}</p>
+                        <p className="text-xs font-bold text-white/80">{typeof val === 'number' && key.includes('ms') ? `${val}ms` : val}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-4">
+                <Code className="w-12 h-12 text-white/5" />
+                <p className="text-white/20 text-sm">Select a trace to view detailed system reasoning.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
+  );
+}
+
+export default function DecisionLogs() {
+  return (
+    <Suspense fallback={
+      <div className="h-full w-full flex items-center justify-center bg-[#050505]">
+        <Loader2 className="w-12 h-12 text-primary-accent animate-spin" />
+      </div>
+    }>
+      <DecisionLogsContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   ReactFlow,
@@ -83,7 +83,7 @@ const nodeTypes = {
   custom: CustomNode,
 };
 
-export default function WorkflowGraph() {
+function WorkflowGraphContent() {
   const searchParams = useSearchParams();
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -222,28 +222,30 @@ export default function WorkflowGraph() {
           <Controls className="!bg-elevated !border-border !fill-white" />
           <MiniMap 
             className="!bg-elevated !border-border" 
-            nodeColor={(node: any) => {
-              if (node.data.color === 'cyan') return '#38BDF8';
-              if (node.data.color === 'purple') return '#8B5CF6';
-              if (node.data.color === 'amber') return '#F59E0B';
-              if (node.data.color === 'green') return '#7CFF6B';
-              if (node.data.color === 'pink') return '#EC4899';
-              return '#111827';
+            nodeColor={(n) => {
+              if (n.data?.color === 'cyan') return '#06b6d4';
+              if (n.data?.color === 'purple') return '#a855f7';
+              if (n.data?.color === 'amber') return '#f59e0b';
+              if (n.data?.color === 'green') return '#10b981';
+              if (n.data?.color === 'pink') return '#ec4899';
+              return '#7CFF6B';
             }}
-            maskColor="rgba(0, 0, 0, 0.6)"
+            maskColor="rgba(0, 0, 0, 0.5)"
           />
         </ReactFlow>
-
-        {/* Overlay Info */}
-        <div className="absolute bottom-8 left-8 p-6 glass-panel rounded-2xl max-w-xs pointer-events-none">
-          <h4 className="text-sm font-bold mb-2">Graph Intelligence</h4>
-          <p className="text-xs text-white/40 leading-relaxed">
-            The deterministic engine uses a non-linear processing graph to ensure 
-            intent validation before prompt synthesis. Each node represents a 
-            discrete AI microservice.
-          </p>
-        </div>
       </div>
     </div>
+  );
+}
+
+export default function WorkflowGraph() {
+  return (
+    <Suspense fallback={
+      <div className="h-full w-full flex items-center justify-center bg-[#050505]">
+        <Loader2 className="w-12 h-12 text-primary-accent animate-spin" />
+      </div>
+    }>
+      <WorkflowGraphContent />
+    </Suspense>
   );
 }
