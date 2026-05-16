@@ -1,14 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import voice, intent, prompt, memory, graph, logs, session
+from app.config import settings
 
 app = FastAPI(title="TOTEM - Voice Prompt Engine")
+
+allowed_origins = [origin.strip() for origin in settings.FRONTEND_URLS.split(",") if origin.strip()]
+if not allowed_origins:
+    allowed_origins = ["*"]
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, replace with your specific Vercel domains
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials="*" not in allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
