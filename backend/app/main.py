@@ -7,11 +7,14 @@ app = FastAPI(title="TOTEM - Voice Prompt Engine")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
+    allow_origins=["*"], # In production, replace with your specific Vercel domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Export for Vercel
+app = app
 
 @app.get("/")
 async def root():

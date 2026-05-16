@@ -53,15 +53,13 @@ async def upload_voice(
                 db.commit()
     
         # Save temp file
+        import tempfile
+        temp_dir = tempfile.gettempdir()
         temp_filename = f"{uuid.uuid4()}_{audio.filename}"
-        # Use a more reliable temp path on Windows
-        temp_dir = os.path.join(os.getcwd(), "temp_audio")
-        if not os.path.exists(temp_dir):
-            os.makedirs(temp_dir)
         temp_path = os.path.join(temp_dir, temp_filename)
             
         with open(temp_path, "wb") as f:
-            f.write(await audio.read())
+            f.write(audio_bytes) # Use already read bytes
         
         # Transcribe with Deepgram
         result = await stt_service.transcribe(temp_path, mimetype=audio.content_type)
