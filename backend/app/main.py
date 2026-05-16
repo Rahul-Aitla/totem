@@ -1,11 +1,13 @@
+from app.config import settings
+from app.routes import graph, intent, logs, memory, prompt, session, voice
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import voice, intent, prompt, memory, graph, logs, session
-from app.config import settings
 
 app = FastAPI(title="TOTEM - Voice Prompt Engine")
 
-allowed_origins = [origin.strip() for origin in settings.FRONTEND_URLS.split(",") if origin.strip()]
+allowed_origins = [
+    origin.strip() for origin in settings.FRONTEND_URLS.split(",") if origin.strip()
+]
 if not allowed_origins:
     allowed_origins = ["*"]
 
@@ -21,9 +23,11 @@ app.add_middleware(
 # Export for Vercel
 app = app
 
+
 @app.get("/")
 async def root():
     return {"message": "Welcome to TOTEM API"}
+
 
 # Include routers
 app.include_router(voice.router)
@@ -36,4 +40,5 @@ app.include_router(session.router)
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
