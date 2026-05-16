@@ -8,6 +8,9 @@ app = FastAPI(title="TOTEM - Voice Prompt Engine")
 allowed_origins = [
     origin.strip() for origin in settings.FRONTEND_URLS.split(",") if origin.strip()
 ]
+production_frontend_origin = "https://totem-beta.vercel.app"
+if production_frontend_origin not in allowed_origins:
+    allowed_origins.append(production_frontend_origin)
 if not allowed_origins:
     allowed_origins = ["*"]
 
