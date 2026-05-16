@@ -21,9 +21,9 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden font-sans text-foreground">
+    <div className="flex h-screen overflow-hidden font-sans text-foreground shell-surface">
       <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-[#050505] relative">
+      <main className="flex-1 overflow-y-auto scrollbar-hide relative bg-transparent">
         <AnimatePresence mode="wait">
           <motion.div
             key={pathname}

@@ -105,6 +105,14 @@ export const listMemories = async (sessionId: string) => {
   return response.json();
 };
 
+export const listAllMemories = async () => {
+  const response = await fetch(`${API_BASE_URL}/memory/list`);
+  if (!response.ok) {
+    throw new Error('Failed to list memories');
+  }
+  return response.json();
+};
+
 export const createMemory = async (data: { user_session_id: string, fact_text: string, memory_type?: string }) => {
   const response = await fetch(`${API_BASE_URL}/memory/create`, {
     method: 'POST',

@@ -77,9 +77,9 @@ export function Sidebar() {
   };
 
   return (
-    <div className="flex flex-col h-full w-[260px] bg-secondary border-r border-border p-6 gap-8 overflow-y-auto">
+    <div className="flex flex-col h-full w-[280px] shrink-0 border-r border-white/8 p-6 gap-8 overflow-y-auto scrollbar-hide bg-[linear-gradient(180deg,rgba(11,16,32,0.96),rgba(5,5,5,0.98))] shadow-[inset_-1px_0_0_rgba(255,255,255,0.02)]">
       <div className="flex items-center gap-3 shrink-0">
-        <div className="w-10 h-10 rounded-xl bg-primary-accent flex items-center justify-center shadow-[0_0_20px_rgba(124,255,107,0.3)]">
+        <div className="w-10 h-10 rounded-xl bg-primary-accent flex items-center justify-center shadow-[0_0_24px_rgba(124,255,107,0.32)] ring-1 ring-white/10">
           <Mic2 className="text-background w-6 h-6" />
         </div>
         <div>
@@ -97,10 +97,10 @@ export function Sidebar() {
               key={item.name}
               href={item.href}
               className={cn(
-                "group flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 relative overflow-hidden",
+                "group flex items-center gap-3 px-3 py-3 rounded-xl transition-all duration-200 relative overflow-hidden border border-transparent",
                 isActive 
-                  ? "bg-white/5 text-primary-accent" 
-                  : "text-white/60 hover:text-white hover:bg-white/5"
+                  ? "bg-white/6 text-primary-accent border-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]" 
+                  : "text-white/55 hover:text-white hover:bg-white/5 hover:border-white/5"
               )}
             >
               {isActive && (
@@ -127,10 +127,10 @@ export function Sidebar() {
                 key={session.id} 
                 onClick={() => handleSwitchSession(session.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2 text-[13px] rounded-md transition-colors text-left group",
+                  "w-full flex items-center gap-3 px-3 py-2.5 text-[13px] rounded-xl transition-colors text-left group border border-transparent",
                   localStorage.getItem('totem_session_id') === session.id 
-                    ? "bg-white/5 text-white" 
-                    : "text-white/50 hover:text-white hover:bg-white/5"
+                    ? "bg-white/6 text-white border-white/10" 
+                    : "text-white/50 hover:text-white hover:bg-white/5 hover:border-white/5"
                 )}
               >
                 <History className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
@@ -144,7 +144,7 @@ export function Sidebar() {
           </div>
         </div>
 
-        <div className="p-4 rounded-xl bg-elevated/50 border border-border/50">
+        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/8 backdrop-blur-sm">
           <div className="flex items-center gap-2 mb-3">
             <Database className="w-4 h-4 text-secondary-accent" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-white/60">System Status</span>
@@ -169,12 +169,12 @@ export function Sidebar() {
         <Button 
           variant="ghost" 
           onClick={handleResetSession}
-          className="justify-start gap-3 px-3 text-white/40 hover:text-white hover:bg-white/5"
+          className="justify-start gap-3 px-3 text-white/40 hover:text-white hover:bg-white/5 rounded-xl"
         >
           <RotateCcw className="w-5 h-5" />
           <span className="text-[14px] font-medium">Reset Session</span>
         </Button>
-        <button className="flex items-center gap-3 px-3 py-2 text-white/40 hover:text-white transition-colors">
+        <button className="flex items-center gap-3 px-3 py-2 text-white/40 hover:text-white transition-colors rounded-xl hover:bg-white/5">
           <Settings className="w-5 h-5" />
           <span className="text-[14px] font-medium">Settings</span>
         </button>

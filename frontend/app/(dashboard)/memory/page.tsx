@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { listMemories, createMemory } from '@/lib/api';
+import { listAllMemories, createMemory } from '@/lib/api';
 
 export default function MemoryCenter() {
   const router = useRouter();
@@ -28,15 +28,19 @@ export default function MemoryCenter() {
   const [sessionId, setSessionId] = useState<string>('');
 
   useEffect(() => {
-    const sid = localStorage.getItem('totem_session_id') || 'anonymous';
+    let sid = localStorage.getItem('totem_session_id');
+    if (!sid) {
+      sid = `session-${Math.random().toString(36).substring(7)}`;
+      localStorage.setItem('totem_session_id', sid);
+    }
     setSessionId(sid);
-    fetchMemories(sid);
+    fetchMemories();
   }, []);
 
-  const fetchMemories = async (sid: string) => {
+  const fetchMemories = async () => {
     try {
       setLoading(true);
-      const data = await listMemories(sid);
+      const data = await listAllMemories();
       setMemories(data);
     } catch (err) {
       console.error("Failed to fetch memories:", err);
@@ -51,7 +55,7 @@ export default function MemoryCenter() {
     
     try {
       await createMemory({ user_session_id: sessionId, fact_text: fact });
-      fetchMemories(sessionId);
+      fetchMemories();
     } catch (err) {
       console.error("Failed to create memory:", err);
     }
@@ -111,7 +115,7 @@ export default function MemoryCenter() {
           ))}
           {filteredMemories.length === 0 && (
             <div className="col-span-full py-20 text-center border border-dashed border-white/10 rounded-2xl">
-              <p className="text-white/20">No memories found for this session.</p>
+              <p className="text-white/20">No memories found yet.</p>
             </div>
           )}
         </div>

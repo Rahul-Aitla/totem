@@ -53,6 +53,13 @@
 }
 
 @layer base {
+  html,
+  body {
+    height: 100%;
+    background: var(--background);
+    color: var(--foreground);
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     background-color: #050505;
@@ -70,5 +77,21 @@
   
   .premium-card {
     @apply bg-elevated/20 border border-border rounded-lg transition-all duration-300 hover:border-white/20 hover:bg-elevated/30;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .shell-surface {
+    background:
+      radial-gradient(circle at top left, rgba(124, 255, 107, 0.08), transparent 32%),
+      radial-gradient(circle at top right, rgba(56, 189, 248, 0.06), transparent 28%),
+      linear-gradient(180deg, rgba(17, 24, 39, 0.9), rgba(5, 5, 5, 0.98));
   }
 }

@@ -325,10 +325,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full shell-surface">
       {/* Center Content: Main AI Workflow */}
-      <div className="flex-1 flex flex-col min-w-0 bg-[#050505] border-r border-border/50">
-        <header className="h-16 border-b border-border/50 flex items-center justify-between px-8 bg-background/50 backdrop-blur-sm sticky top-0 z-10">
+      <div className="flex-1 flex flex-col min-w-0 bg-white/[0.02] border-r border-white/8 backdrop-blur-sm">
+        <header className="h-16 border-b border-white/8 flex items-center justify-between px-8 bg-white/[0.03] backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-display font-bold">Workspace</h2>
             <div className="h-4 w-[1px] bg-border" />
@@ -358,51 +358,67 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 space-y-8 max-w-5xl mx-auto w-full">
+        <div className="flex-1 overflow-y-auto scrollbar-hide p-8 space-y-8 max-w-5xl mx-auto w-full">
           {state === 'idle' || state === 'recording' || state === 'recorded' ? (
-            <div className="h-full flex flex-col items-center justify-center gap-12 py-20">
-              <VoiceOrb 
-                state={state} 
-                onStart={startRecording} 
-                onStop={stopRecording} 
-              />
-              <div className="text-center space-y-6">
-                <div className="space-y-4">
-                  <h3 className="text-3xl font-display font-bold">
-                    {state === 'idle' ? 'Ready to optimize' : state === 'recording' ? 'Listening to intent...' : 'Voice Captured'}
-                  </h3>
-                  <p className="text-white/40 max-w-md mx-auto">
-                    {state === 'idle' 
-                      ? 'Click the engine core to start recording your voice input. We will transform your messy thoughts into deterministic prompts.'
-                      : state === 'recording'
-                      ? 'System is capturing your voice. Speak clearly about your task, domain, and specific constraints.'
-                      : 'Your voice input has been recorded and is ready for processing.'}
-                  </p>
+            <div className="relative overflow-hidden rounded-3xl border border-white/8 bg-white/[0.03] backdrop-blur-sm px-8 py-10 md:px-12 md:py-12 shadow-[0_30px_90px_rgba(0,0,0,0.18)]">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(124,255,107,0.08),transparent_32%),radial-gradient(circle_at_top_right,rgba(56,189,248,0.06),transparent_30%)]" />
+              <div className="relative grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-5 text-center lg:text-left">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-black/20 text-[10px] font-bold uppercase tracking-[0.22em] text-white/50">
+                    <span className="w-1.5 h-1.5 rounded-full bg-primary-accent animate-pulse" />
+                    {state === 'idle' ? 'New Session Workspace' : state === 'recording' ? 'Recording In Progress' : 'Audio Captured'}
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="text-3xl md:text-4xl font-display font-bold leading-tight">
+                      {state === 'idle' ? 'Begin with a clean voice session' : state === 'recording' ? 'Capture the full request' : 'Ready to process'}
+                    </h3>
+                    <p className="text-white/45 max-w-2xl text-sm md:text-base leading-7 mx-auto lg:mx-0">
+                      {state === 'idle' 
+                        ? 'Tap the engine core to open a fresh session. Speak naturally and we’ll shape the request into a sharper prompt while keeping the workflow separate.'
+                        : state === 'recording'
+                        ? 'Speak in English, Hindi, or Hinglish. Mention the task, audience, tone, and any constraints you want preserved in the final output.'
+                        : 'The recording is saved. You can process it now or re-record if you want a cleaner input.'}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 text-[11px] text-white/40">
+                    <span className="px-3 py-1 rounded-full border border-white/10 bg-white/[0.03]">Fresh session per recording</span>
+                    <span className="px-3 py-1 rounded-full border border-white/10 bg-white/[0.03]">Memory aware</span>
+                    <span className="px-3 py-1 rounded-full border border-white/10 bg-white/[0.03]">Separate workflow graph</span>
+                  </div>
+
+                  {state === 'recorded' && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex gap-4 justify-center lg:justify-start pt-2"
+                    >
+                      <Button 
+                        onClick={uploadAndProcess} 
+                        className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8 h-12 rounded-full"
+                      >
+                        <Zap className="w-4 h-4 mr-2" />
+                        Process Voice
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={reRecord}
+                        className="border-white/10 hover:bg-white/5 h-12 px-8 rounded-full"
+                      >
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Re-record
+                      </Button>
+                    </motion.div>
+                  )}
                 </div>
 
-                {state === 'recorded' && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-4 justify-center"
-                  >
-                    <Button 
-                      onClick={uploadAndProcess} 
-                      className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8 h-12 rounded-full"
-                    >
-                      <Zap className="w-4 h-4 mr-2" />
-                      Process Voice
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={reRecord}
-                      className="border-white/10 hover:bg-white/5 h-12 px-8 rounded-full"
-                    >
-                      <RotateCcw className="w-4 h-4 mr-2" />
-                      Re-record
-                    </Button>
-                  </motion.div>
-                )}
+                <div className="flex items-center justify-center lg:justify-end">
+                  <VoiceOrb 
+                    state={state} 
+                    onStart={startRecording} 
+                    onStop={stopRecording} 
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -470,8 +486,8 @@ export default function Dashboard() {
       </div>
 
       {/* Right Sidebar: Insights & Analytics */}
-      <div className="w-[320px] bg-secondary/30 backdrop-blur-sm flex flex-col">
-        <div className="p-6 border-b border-border/50">
+      <div className="w-[320px] bg-white/[0.03] backdrop-blur-sm flex flex-col border-l border-white/8">
+        <div className="p-6 border-b border-white/8">
           <h3 className="text-[11px] font-bold uppercase tracking-widest text-white/40 mb-6">Real-time Insights</h3>
           
           <div className="space-y-6">
@@ -491,7 +507,7 @@ export default function Dashboard() {
               color="text-warning" 
             />
             
-            <div className="p-4 rounded-xl bg-elevated/40 border border-border/50">
+            <div className="p-4 rounded-xl bg-white/[0.04] border border-white/8">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-xs font-bold text-white/60">Token Reduction</span>
                 <span className="text-xs font-bold text-primary-accent">-{metrics.reduction.toFixed(0)}%</span>
@@ -511,7 +527,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="flex-1 p-6 overflow-y-auto">
+        <div className="flex-1 p-6 overflow-y-auto scrollbar-hide">
           <h3 className="text-[11px] font-bold uppercase tracking-widest text-white/40 mb-6">Active Workflow Nodes</h3>
           <div className="space-y-3">
             {steps.map((step, i) => (
@@ -633,9 +649,9 @@ function VoiceOrb({ state, onStart, onStop }: { state: WorkflowState, onStart: (
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute -bottom-12 left-1/2 -translate-x-1/2 text-primary-accent text-[11px] font-bold uppercase tracking-[0.3em] whitespace-nowrap"
+            className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full border border-white/10 bg-black/30 backdrop-blur-sm text-primary-accent text-[10px] font-bold uppercase tracking-[0.28em] whitespace-nowrap"
           >
-            Click to start engine
+            Tap to start engine
           </motion.div>
         )}
         
@@ -644,9 +660,9 @@ function VoiceOrb({ state, onStart, onStop }: { state: WorkflowState, onStart: (
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute -bottom-12 left-1/2 -translate-x-1/2 text-secondary-accent text-[11px] font-bold uppercase tracking-[0.3em] whitespace-nowrap"
+            className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full border border-white/10 bg-black/30 backdrop-blur-sm text-secondary-accent text-[10px] font-bold uppercase tracking-[0.28em] whitespace-nowrap"
           >
-            Click to stop engine
+            Tap to stop engine
           </motion.div>
         )}
       </AnimatePresence>

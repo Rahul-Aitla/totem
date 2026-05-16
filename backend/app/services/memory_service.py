@@ -172,6 +172,15 @@ class MemoryService:
             .all()
         )
 
+    def get_all_memories(self, db: Session):
+        """Get all active memories across sessions"""
+        return (
+            db.query(MemoryNode)
+            .filter(MemoryNode.status == "active")
+            .order_by(MemoryNode.created_at.desc())
+            .all()
+        )
+
     def create_memory(
         self,
         db: Session,
