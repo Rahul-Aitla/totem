@@ -1,10 +1,11 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from sqlalchemy.orm import Session
 import os
 import uuid
 import time
 from app.services.stt_service import stt_service
 from app.services.memory_service import memory_service
+from app.services.decision_service import decision_service
 from app.models import VoiceLog, Session as UserSession
 from app.database import get_db
 
@@ -13,7 +14,7 @@ router = APIRouter(prefix="/voice", tags=["voice"])
 @router.post("/upload")
 async def upload_voice(
     audio: UploadFile = File(...),
-    session_id: str = None,
+    session_id: str = Form(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -90,6 +91,21 @@ async def upload_voice(
         db.add(voice_log)
         db.commit()
         db.refresh(voice_log)
+        
+        # Log decision
+        decision_service.log_decision(
+            db=db,
+            step="STT_TRANSCRIPTION",
+            user_session_id=session_id,
+            voice_log_id=voice_log.id,
+            decision=f"Transcribed audio with {result['language']} detection.",
+            metrics={
+                "confidence": float(result['confidence']),
+                "latency_ms": processing_latency,
+                "length_chars": len(result['text'])
+            },
+            reasoning={"model": "deepgram-whisper-v3"}
+        )
         
         # Extract and store memory asynchronously (simplified: just call it here)
         memory_service.extract_and_store_memory(db, session_id, result['text'])

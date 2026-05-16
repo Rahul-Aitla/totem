@@ -58,6 +58,7 @@ class OptimizedPrompt(Base):
     voice_log_id = Column(UUID(as_uuid=True), ForeignKey("voice_logs.id", ondelete="CASCADE"), nullable=False)
     original_text = Column(Text, nullable=False)
     optimized_text = Column(Text, nullable=False)
+    reasoning = Column(Text)
     original_token_count = Column(Integer, nullable=False)
     optimized_token_count = Column(Integer, nullable=False)
     token_reduction_percentage = Column(Numeric(5, 2))

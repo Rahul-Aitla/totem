@@ -18,7 +18,8 @@ import {
   Info,
   ChevronRight,
   ShieldCheck,
-  Cpu
+  Cpu,
+  BrainCircuit
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -27,11 +28,12 @@ import {
   uploadVoice, 
   extractIntent, 
   confirmIntent as apiConfirmIntent, 
-  optimizePrompt as apiOptimizePrompt 
+  optimizePrompt as apiOptimizePrompt,
+  updateIntent as apiUpdateIntent
 } from '@/lib/api';
 
 // --- Types ---
-type WorkflowState = 'idle' | 'recording' | 'recorded' | 'processing' | 'confirming' | 'optimizing' | 'completed';
+type WorkflowState = 'idle' | 'recording' | 'recorded' | 'processing' | 'confirming' | 'editing' | 'optimizing' | 'completed';
 
 interface PipelineStep {
   id: string;
@@ -71,20 +73,56 @@ export default function Dashboard() {
     language: 'None',
     reduction: 0,
     originalTokens: 0,
-    optimizedTokens: 0
+    optimizedTokens: 0,
+    reasoning: '',
+    contextUsed: false
+  });
+
+  const [editingIntent, setEditingIntent] = useState<any>(null);
+
+  const [performance, setPerformance] = useState({
+    stt: 0,
+    intent: 0,
+    optimize: 0,
+    total: 0
   });
 
   const updateStep = (id: string, status: PipelineStep['status'], data?: any) => {
+    const startTime = Date.now();
     setSteps(prev => prev.map(s => s.id === id ? { ...s, status, data } : s));
     
     // Update metrics based on step data
     if (status === 'completed') {
+      const endTime = Date.now();
+      const latency = endTime - startTime; // This is a rough estimate of client-side processing/waiting
+
+      if (id === 'transcript') {
+        setPerformance(prev => ({ ...prev, stt: latency }));
+      }
+      if (id === 'intent') {
+        setPerformance(prev => ({ ...prev, intent: latency }));
+        setMetrics(prev => ({ ...prev, confidence: (data.confidence_val || 0.95) * 100 }));
+      }
       if (id === 'language') {
         setMetrics(prev => ({ ...prev, language: data.lang, confidence: data.confidence * 100 }));
       }
       if (id === 'optimize') {
-        const reductionNum = parseFloat(data.reduction.replace('%', ''));
-        setMetrics(prev => ({ ...prev, reduction: reductionNum, optimizedTokens: data.tokens }));
+        setPerformance(prev => ({ 
+          ...prev, 
+          optimize: data.latency || latency, 
+          total: prev.stt + prev.intent + (data.latency || latency) 
+        }));
+        const reductionNum = typeof data.reduction === 'number' 
+          ? data.reduction 
+          : parseFloat(data.reduction?.replace('%', '') || '0');
+          
+        setMetrics(prev => ({ 
+          ...prev, 
+          reduction: reductionNum, 
+          optimizedTokens: data.tokens,
+          reasoning: data.reasoning,
+          contextUsed: data.context_used
+        }));
       }
     }
   };
@@ -167,6 +205,7 @@ export default function Dashboard() {
         domain: result.intent.domain,
         format: result.intent.format,
         confidence: `${(confidence * 100).toFixed(1)}%`,
+        confidence_val: confidence,
         constraints: JSON.stringify(result.intent.constraints)
       });
 
@@ -185,21 +224,43 @@ export default function Dashboard() {
     }
   };
 
+  const handleIntentUpdate = async (updatedData: any) => {
+    if (!intentId) return;
+    try {
+      const result = await apiUpdateIntent(intentId, updatedData);
+      updateStep('intent', 'completed', {
+        ...result.intent,
+        constraints: JSON.stringify(result.intent.constraints)
+      });
+      setEditingIntent(null);
+      setState('confirming');
+    } catch (err) {
+      console.error("Failed to update intent:", err);
+    }
+  };
+
   const confirmIntent = async () => {
     if (!intentId) return;
     try {
       setState('optimizing');
       updateStep('confirm', 'completed');
       
+      const confirmStartTime = Date.now();
       // Real confirmation call
       await apiConfirmIntent(intentId, { confirmed: true, action: 'confirm' });
       
       updateStep('optimize', 'active');
       const result = await apiOptimizePrompt(intentId);
       
+      const optimizeEndTime = Date.now();
+      const optimizeLatency = optimizeEndTime - confirmStartTime;
+      
       updateStep('optimize', 'completed', { 
-        reduction: `${result.reduction_percentage.toFixed(0)}%`, 
-        tokens: result.optimized_tokens 
+        reduction: result.reduction_percentage, 
+        tokens: result.optimized_tokens,
+        reasoning: result.reasoning,
+        context_used: result.context_used,
+        latency: optimizeLatency
       });
 
       updateStep('final', 'active');
@@ -218,6 +279,25 @@ export default function Dashboard() {
     setIntentId(null);
   };
 
+  const handleExport = () => {
+    const finalStep = steps.find(s => s.id === 'final');
+    if (!finalStep || !finalStep.data) return;
+    
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify({
+      session_id: sessionId,
+      optimized_prompt: finalStep.data,
+      metrics: metrics,
+      timestamp: new Date().toISOString()
+    }, null, 2));
+    
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href",     dataStr);
+    downloadAnchorNode.setAttribute("download", `optimized_prompt_${sessionId}.json`);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
+  };
+
   return (
     <div className="flex h-full">
       {/* Center Content: Main AI Workflow */}
@@ -228,7 +308,7 @@ export default function Dashboard() {
             <div className="h-4 w-[1px] bg-border" />
             <div className="flex items-center gap-2 text-white/40 text-sm">
               <Clock className="w-4 h-4" />
-              <span>Session: Fitness-Marketing-01</span>
+              <span>Session: {sessionId}</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -236,7 +316,17 @@ export default function Dashboard() {
               <RotateCcw className="w-4 h-4 mr-2" />
               Reset Session
             </Button>
-            <Button size="sm" className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold">
+            <Button 
+              size="sm" 
+              onClick={handleExport}
+              disabled={state !== 'completed'}
+              className={cn(
+                "font-bold transition-all",
+                state === 'completed' 
+                  ? "bg-primary-accent text-background hover:bg-primary-accent/90" 
+                  : "bg-white/5 text-white/20 cursor-not-allowed"
+              )}
+            >
               Export Result
             </Button>
           </div>
@@ -293,13 +383,62 @@ export default function Dashboard() {
             <div className="space-y-6">
               {steps.map((step, index) => (
                 <PipelineCard 
-                  key={step.id} 
-                  step={step} 
-                  index={index}
-                  onConfirm={step.id === 'confirm' && state === 'confirming' ? confirmIntent : undefined}
-                />
-              ))}
-            </div>
+                    key={step.id} 
+                    step={step} 
+                    index={index}
+                    metrics={metrics}
+                    onConfirm={step.id === 'confirm' && state === 'confirming' ? confirmIntent : undefined}
+                    onEdit={step.id === 'confirm' && state === 'confirming' ? () => {
+                      const intentStep = steps.find(s => s.id === 'intent');
+                      setEditingIntent(intentStep?.data);
+                      setState('editing');
+                    } : undefined}
+                  />
+                ))}
+                {state === 'editing' && editingIntent && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="premium-card p-8 border-primary-accent/30 bg-primary-accent/[0.02] space-y-6"
+                  >
+                    <h3 className="text-xl font-display font-bold">Edit Extracted Intent</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Task</label>
+                        <input 
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:border-primary-accent outline-none"
+                          value={editingIntent.task}
+                          onChange={e => setEditingIntent({...editingIntent, task: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Domain</label>
+                        <input 
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:border-primary-accent outline-none"
+                          value={editingIntent.domain}
+                          onChange={e => setEditingIntent({...editingIntent, domain: e.target.value})}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] text-white/40 uppercase font-bold tracking-widest">Format</label>
+                        <input 
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm focus:border-primary-accent outline-none"
+                          value={editingIntent.format}
+                          onChange={e => setEditingIntent({...editingIntent, format: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 pt-4">
+                      <Button onClick={() => handleIntentUpdate(editingIntent)} className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8">
+                        Save Changes
+                      </Button>
+                      <Button variant="ghost" onClick={() => setState('confirming')} className="text-white/40 hover:text-white">
+                        Cancel
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
           )}
         </div>
       </div>
@@ -318,7 +457,13 @@ export default function Dashboard() {
               color={metrics.confidence > 80 ? "text-primary-accent" : metrics.confidence > 50 ? "text-warning" : "text-red-400"} 
             />
             <InsightCard label="Detected Language" value={metrics.language} subValue="Auto-detected" icon={Languages} color="text-secondary-accent" />
-            <InsightCard label="Latency" value="240ms" subValue="Optimized Path" icon={Zap} color="text-warning" />
+            <InsightCard 
+              label="Latency" 
+              value={performance.total > 0 ? `${performance.total}ms` : "---"} 
+              subValue="Total Pipeline" 
+              icon={Zap} 
+              color="text-warning" 
+            />
             
             <div className="p-4 rounded-xl bg-elevated/40 border border-border/50">
               <div className="flex items-center justify-between mb-4">
@@ -483,7 +628,7 @@ function VoiceOrb({ state, onStart, onStop }: { state: WorkflowState, onStart: (
   );
 }
 
-function PipelineCard({ step, index, onConfirm }: { step: PipelineStep, index: number, onConfirm?: () => void }) {
+function PipelineCard({ step, index, metrics, onConfirm, onEdit }: { step: PipelineStep, index: number, metrics: any, onConfirm?: () => void, onEdit?: () => void }) {
   if (step.status === 'pending') return null;
 
   return (
@@ -584,7 +729,7 @@ function PipelineCard({ step, index, onConfirm }: { step: PipelineStep, index: n
                     <Button onClick={onConfirm} className="bg-primary-accent text-background hover:bg-primary-accent/90 font-bold px-8">
                       Confirm & Optimize
                     </Button>
-                    <Button variant="outline" className="border-white/10 hover:bg-white/5">
+                    <Button variant="outline" onClick={onEdit} className="border-white/10 hover:bg-white/5">
                       Edit Intent
                     </Button>
                   </div>
@@ -592,20 +737,44 @@ function PipelineCard({ step, index, onConfirm }: { step: PipelineStep, index: n
               </div>
             )}
             {step.id === 'optimize' && (
-              <div className="flex items-center gap-12">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-display font-bold text-primary-accent">-{step.data.reduction}</span>
-                  <span className="text-xs text-white/40 uppercase font-bold">Reduction</span>
+              <div className="space-y-6">
+                <div className="flex items-center gap-12">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-display font-bold text-primary-accent">
+                      -{typeof step.data.reduction === 'number' ? step.data.reduction.toFixed(0) : step.data.reduction}
+                    </span>
+                    <span className="text-xs text-white/40 uppercase font-bold">Reduction</span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-3xl font-display font-bold">{step.data.tokens || metrics.optimizedTokens}</span>
+                    <span className="text-xs text-white/40 uppercase font-bold">Tokens</span>
+                  </div>
+                  <div className="flex-1 h-[1px] bg-border" />
+                  <div className="flex items-center gap-2 text-success">
+                    <ShieldCheck className="w-5 h-5" />
+                    <span className="text-sm font-bold uppercase tracking-wider">Validated</span>
+                  </div>
                 </div>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-display font-bold">{step.data.tokens}</span>
-                  <span className="text-xs text-white/40 uppercase font-bold">Tokens</span>
-                </div>
-                <div className="flex-1 h-[1px] bg-border" />
-                <div className="flex items-center gap-2 text-success">
-                  <ShieldCheck className="w-5 h-5" />
-                  <span className="text-sm font-bold uppercase tracking-wider">Validated</span>
-                </div>
+
+                {metrics.reasoning && (
+                  <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4 text-primary-accent" />
+                        <h5 className="text-[10px] text-white/60 uppercase font-bold tracking-widest">Optimization Reasoning</h5>
+                      </div>
+                      {metrics.contextUsed && (
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-secondary-accent/20 border border-secondary-accent/20">
+                          <BrainCircuit className="w-3 h-3 text-secondary-accent" />
+                          <span className="text-[9px] font-bold text-secondary-accent uppercase tracking-wider">Memory Applied</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-white/60 leading-relaxed italic">
+                      {metrics.reasoning}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             {step.id === 'final' && (

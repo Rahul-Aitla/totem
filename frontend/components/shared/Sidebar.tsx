@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { 
   LayoutDashboard, 
   GitBranch, 
@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { listSessions } from '@/lib/api';
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -27,14 +28,53 @@ const navigation = [
   { name: 'Decision Logs', href: '/logs', icon: Activity },
 ];
 
-const RECENT_SESSIONS = [
-  { id: '1', title: 'Fitness Marketing', time: '2h ago' },
-  { id: '2', title: 'SaaS Onboarding', time: '1d ago' },
-  { id: '3', title: 'Legal Contract v2', time: '3d ago' },
-];
+function formatRelativeTime(dateString: string) {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (diffInSeconds < 60) return 'just now';
+  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
+  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
+  return `${Math.floor(diffInSeconds / 86400)}d ago`;
+}
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [sessions, setSessions] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchSessions = async () => {
+      try {
+        const data = await listSessions();
+        setSessions(data);
+      } catch (err) {
+        console.error("Failed to fetch sessions:", err);
+      }
+    };
+
+    fetchSessions();
+    // Refresh every 10 seconds for real-time feel
+    const interval = setInterval(fetchSessions, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSwitchSession = (sid: string) => {
+    localStorage.setItem('totem_session_id', sid);
+    // If we are on a page that might have a sessionId query param (like workflow),
+    // we should navigate to the base pathname to clear it and use the new session.
+    router.push(pathname);
+    setTimeout(() => window.location.reload(), 100);
+  };
+
+  const handleResetSession = () => {
+    const newSid = `session-${Math.random().toString(36).substring(7)}`;
+    localStorage.setItem('totem_session_id', newSid);
+    router.push(pathname);
+    setTimeout(() => window.location.reload(), 100);
+  };
 
   return (
     <div className="flex flex-col h-full w-[260px] bg-secondary border-r border-border p-6 gap-8 overflow-y-auto">
@@ -82,13 +122,25 @@ export function Sidebar() {
         <div>
           <p className="text-[11px] text-white/40 font-semibold uppercase tracking-widest mb-4 px-2">Recent Sessions</p>
           <div className="space-y-1">
-            {RECENT_SESSIONS.map((session) => (
-              <button key={session.id} className="w-full flex items-center gap-3 px-3 py-2 text-[13px] text-white/50 hover:text-white hover:bg-white/5 rounded-md transition-colors text-left group">
+            {sessions.map((session) => (
+              <button 
+                key={session.id} 
+                onClick={() => handleSwitchSession(session.id)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2 text-[13px] rounded-md transition-colors text-left group",
+                  localStorage.getItem('totem_session_id') === session.id 
+                    ? "bg-white/5 text-white" 
+                    : "text-white/50 hover:text-white hover:bg-white/5"
+                )}
+              >
                 <History className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
                 <span className="truncate flex-1">{session.title}</span>
-                <span className="text-[10px] opacity-40 group-hover:opacity-60">{session.time}</span>
+                <span className="text-[10px] opacity-40 group-hover:opacity-60">{formatRelativeTime(session.last_activity_at)}</span>
               </button>
             ))}
+            {sessions.length === 0 && (
+              <p className="px-3 py-2 text-[11px] text-white/20 italic">No recent sessions</p>
+            )}
           </div>
         </div>
 
@@ -114,7 +166,11 @@ export function Sidebar() {
       </div>
 
       <div className="mt-auto flex flex-col gap-2 shrink-0">
-        <Button variant="ghost" className="justify-start gap-3 px-3 text-white/40 hover:text-white hover:bg-white/5">
+        <Button 
+          variant="ghost" 
+          onClick={handleResetSession}
+          className="justify-start gap-3 px-3 text-white/40 hover:text-white hover:bg-white/5"
+        >
           <RotateCcw className="w-5 h-5" />
           <span className="text-[14px] font-medium">Reset Session</span>
         </Button>

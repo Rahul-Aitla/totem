@@ -14,6 +14,7 @@ class IntentConfirmRequest(BaseModel):
     action: str = "confirm"
 
 from app.services.memory_service import memory_service
+from app.services.decision_service import decision_service
 
 @router.post("/extract")
 async def detect_intent(
@@ -55,6 +56,21 @@ async def detect_intent(
     db.commit()
     db.refresh(intent)
     
+    # Log decision
+    decision_service.log_decision(
+        db=db,
+        step="INTENT_EXTRACTION",
+        user_session_id=voice_log.user_session_id,
+        voice_log_id=voice_log_uuid,
+        intent_id=intent.id,
+        decision=f"Extracted task: {intent_result['task']}",
+        metrics={
+            "confidence": float(intent_result['confidence']),
+            "constraints_count": len(intent_result.get('constraints', {}))
+        },
+        reasoning={"model": "gemini-3-flash-preview", "context_used": bool(context)}
+    )
+    
     # Build confirmation message
     confirmation_msg = f"You want to {intent_result['task'].lower()} in {intent_result['format'].replace('_', ' ')}. Confirm?"
     
@@ -63,6 +79,48 @@ async def detect_intent(
         "intent": intent_result,
         "confirmation_message": confirmation_msg,
         "confidence": intent_result['confidence']
+    }
+
+class IntentUpdateRequest(BaseModel):
+    task: str = None
+    format: str = None
+    domain: str = None
+    constraints: dict = None
+
+@router.patch("/update")
+async def update_intent_details(
+    intent_id: str,
+    request: IntentUpdateRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually update intent details
+    """
+    try:
+        intent_uuid = uuid.UUID(intent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid intent_id format")
+
+    intent = db.query(Intent).filter(Intent.id == intent_uuid).first()
+    if not intent:
+        raise HTTPException(status_code=404, detail="Intent not found")
+    
+    if request.task: intent.extracted_task = request.task
+    if request.format: intent.format = request.format
+    if request.domain: intent.domain = request.domain
+    if request.constraints is not None: intent.constraints = request.constraints
+    
+    db.commit()
+    db.refresh(intent)
+    
+    return {
+        "success": True,
+        "intent": {
+            "task": intent.extracted_task,
+            "format": intent.format,
+            "domain": intent.domain,
+            "constraints": intent.constraints
+        }
     }
 
 @router.post("/confirm")

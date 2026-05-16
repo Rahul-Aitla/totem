@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from app.services.prompt_optimizer import prompt_optimizer
 from app.services.memory_service import memory_service
+from app.services.decision_service import decision_service
 from app.models import Intent, OptimizedPrompt, VoiceLog
 from app.database import get_db
 import uuid
@@ -76,12 +77,34 @@ async def optimize_prompt(
         voice_log_id=intent.voice_log_id,
         original_text=original_text,
         optimized_text=optimized_text,
+        reasoning=result.get('reasoning', ''),
         original_token_count=original_tokens,
         optimized_token_count=optimized_tokens,
         token_reduction_percentage=reduction_pct,
         optimization_method="gemini-3-flash-preview"
     )
     db.add(prompt_record)
+    
+    # Log decision
+    decision_service.log_decision(
+        db=db,
+        step="PROMPT_OPTIMIZATION",
+        user_session_id=voice_log.user_session_id,
+        voice_log_id=intent.voice_log_id,
+        intent_id=intent_uuid,
+        optimized_prompt_id=prompt_record.id,
+        decision=f"Optimized prompt with {reduction_pct:.1f}% token reduction.",
+        metrics={
+            "original_tokens": original_tokens,
+            "optimized_tokens": optimized_tokens,
+            "reduction_percentage": float(reduction_pct)
+        },
+        reasoning={
+            "model": "gemini-3-flash-preview", 
+            "context_used": bool(context),
+            "ai_reasoning": result.get('reasoning', '')
+        }
+    )
     
     # Extract and store memory from this interaction
     try:
@@ -95,6 +118,8 @@ async def optimize_prompt(
     return {
         "id": str(prompt_record.id),
         "optimized_prompt": optimized_text,
+        "reasoning": result.get('reasoning', ''),
+        "context_used": bool(context),
         "original_tokens": original_tokens,
         "optimized_tokens": optimized_tokens,
         "reduction_percentage": round(float(reduction_pct), 2)

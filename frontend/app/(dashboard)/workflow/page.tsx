@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   ReactFlow,
   MiniMap,
@@ -26,30 +27,35 @@ import {
   MessageSquare,
   Zap,
   ShieldCheck,
-  LucideIcon
+  BrainCircuit,
+  Loader2,
+  FileText,
+  Target
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { getSessionGraph } from '@/lib/api';
 
 type WorkflowNodeData = {
   label: string;
   category: string;
-  icon: LucideIcon;
-  color: 'cyan' | 'purple' | 'amber' | 'green';
+  icon: React.ElementType;
+  color: 'cyan' | 'purple' | 'amber' | 'green' | 'pink';
 };
 
-type WorkflowNode = Node<WorkflowNodeData>;
+type WorkflowNode = Node<WorkflowNodeData, 'custom'>;
 
 // --- Custom Node Component ---
-const CustomNode = ({ data, selected }: NodeProps<WorkflowNode>) => {
+function CustomNode({ data, selected }: NodeProps<WorkflowNode>) {
+  if (!data) return null;
   const Icon = data.icon;
   
   return (
     <div className={cn(
-      "px-4 py-3 rounded-xl border bg-elevated/80 backdrop-blur-md min-w-[180px] transition-all duration-300",
+      "px-4 py-3 rounded-xl border bg-elevated/80 backdrop-blur-md min-w-[200px] transition-all duration-300",
       selected ? "border-primary-accent shadow-[0_0_20px_rgba(124,255,107,0.2)]" : "border-white/10"
     )}>
-      <Handle type="target" position={Position.Left} className="w-2 h-2 !bg-primary-accent !border-none" />
+      <Handle type="target" position={Position.Top} className="!w-1.5 !h-1.5 !bg-primary-accent !border-none" />
       
       <div className="flex items-center gap-3">
         <div className={cn(
@@ -57,84 +63,113 @@ const CustomNode = ({ data, selected }: NodeProps<WorkflowNode>) => {
           data.color === 'cyan' && "bg-cyan-500/10 border-cyan-500/20 text-cyan-400",
           data.color === 'purple' && "bg-purple-500/10 border-purple-500/20 text-purple-400",
           data.color === 'amber' && "bg-amber-500/10 border-amber-500/20 text-amber-400",
-          data.color === 'green' && "bg-green-500/10 border-green-500/20 text-green-400"
+          data.color === 'green' && "bg-green-500/10 border-green-500/20 text-green-400",
+          data.color === 'pink' && "bg-pink-500/10 border-pink-500/20 text-pink-400"
         )}>
-          <Icon className="w-4 h-4" />
+          {Icon && (typeof Icon === 'string' ? <span className="text-xs font-bold">{Icon}</span> : <Icon className="w-4 h-4" />)}
         </div>
-        <div>
-          <div className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{data.category}</div>
-          <div className="text-sm font-bold text-white/90">{data.label}</div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[8px] text-white/40 uppercase tracking-widest font-bold truncate">{data.category}</div>
+          <div className="text-[11px] font-bold text-white/90 truncate">{data.label}</div>
         </div>
       </div>
 
-      <Handle type="source" position={Position.Right} className="w-2 h-2 !bg-primary-accent !border-none" />
+      <Handle type="source" position={Position.Bottom} className="!w-1.5 !h-1.5 !bg-primary-accent !border-none" />
     </div>
   );
-};
+}
 
 const nodeTypes = {
   custom: CustomNode,
 };
 
-// --- Initial Data ---
-const initialNodes: WorkflowNode[] = [
-  {
-    id: '1',
-    type: 'custom',
-    position: { x: 0, y: 100 },
-    data: { label: 'Voice Input', category: 'Source', icon: Mic2, color: 'cyan' },
-  },
-  {
-    id: '2',
-    type: 'custom',
-    position: { x: 250, y: 100 },
-    data: { label: 'STT Processing', category: 'Processing', icon: Cpu, color: 'purple' },
-  },
-  {
-    id: '3',
-    type: 'custom',
-    position: { x: 500, y: 100 },
-    data: { label: 'Intent Detection', category: 'Processing', icon: Sparkles, color: 'purple' },
-  },
-  {
-    id: '4',
-    type: 'custom',
-    position: { x: 750, y: 0 },
-    data: { label: 'Validation', category: 'Security', icon: ShieldCheck, color: 'amber' },
-  },
-  {
-    id: '5',
-    type: 'custom',
-    position: { x: 750, y: 200 },
-    data: { label: 'User Confirmation', category: 'Interaction', icon: MessageSquare, color: 'amber' },
-  },
-  {
-    id: '6',
-    type: 'custom',
-    position: { x: 1000, y: 100 },
-    data: { label: 'Optimization', category: 'Engine', icon: Zap, color: 'purple' },
-  },
-  {
-    id: '7',
-    type: 'custom',
-    position: { x: 1250, y: 100 },
-    data: { label: 'Final Output', category: 'Result', icon: CheckCircle2, color: 'green' },
-  },
-];
-
-const initialEdges: Edge[] = [
-  { id: 'e1-2', source: '1', target: '2', animated: true, style: { stroke: '#38BDF8' } },
-  { id: 'e2-3', source: '2', target: '3', animated: true, style: { stroke: '#8B5CF6' } },
-  { id: 'e3-4', source: '3', target: '4', animated: true, style: { stroke: '#8B5CF6' } },
-  { id: 'e3-5', source: '3', target: '5', animated: true, style: { stroke: '#8B5CF6' } },
-  { id: 'e4-6', source: '4', target: '6', animated: true, style: { stroke: '#F59E0B' } },
-  { id: 'e5-6', source: '5', target: '6', animated: true, style: { stroke: '#F59E0B' } },
-  { id: 'e6-7', source: '6', target: '7', animated: true, style: { stroke: '#7CFF6B' } },
-];
-
 export default function WorkflowGraph() {
-  const [nodes, , onNodesChange] = useNodesState<WorkflowNode>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const searchParams = useSearchParams();
+  const [nodes, setNodes, onNodesChange] = useNodesState<WorkflowNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+
+  useEffect(() => {
+    const sidFromQuery = searchParams.get('sessionId');
+    const sidFromStorage = localStorage.getItem('totem_session_id') || 'anonymous';
+    const sid = sidFromQuery || sidFromStorage;
+    
+    setActiveSessionId(sid);
+    fetchGraph(sid);
+  }, [searchParams]);
+
+  const fetchGraph = async (sid: string) => {
+    try {
+      setLoading(true);
+      const data = await getSessionGraph(sid);
+      
+      const newNodes: WorkflowNode[] = data.nodes.map((n: any, i: number) => {
+        let icon = Sparkles;
+        let color: WorkflowNodeData['color'] = 'purple';
+        const group = n.group || 'unknown';
+        
+        // Dynamic positioning based on group
+        let x = 0;
+        let y = 0;
+
+        if (group === 'voice') {
+          icon = Mic2;
+          color = 'cyan';
+          x = 0;
+          // Find index within voice group for y positioning
+          const voiceIndex = data.nodes.filter((node: any) => node.group === 'voice').indexOf(n);
+          y = voiceIndex * 200;
+        } else if (group === 'intent') {
+          icon = Target;
+          color = 'amber';
+          x = 300;
+          const intentIndex = data.nodes.filter((node: any) => node.group === 'intent').indexOf(n);
+          y = intentIndex * 200;
+        } else if (group === 'prompt') {
+          icon = FileText;
+          color = 'green';
+          x = 600;
+          const promptIndex = data.nodes.filter((node: any) => node.group === 'prompt').indexOf(n);
+          y = promptIndex * 200;
+        } else if (group === 'memory') {
+          icon = BrainCircuit;
+          color = 'pink';
+          x = -300;
+          const memoryIndex = data.nodes.filter((node: any) => node.group === 'memory').indexOf(n);
+          y = memoryIndex * 150;
+        }
+
+        return {
+          id: n.id,
+          type: 'custom',
+          position: { x, y },
+          data: { 
+            label: n.label || 'Unknown Node', 
+            category: group.toUpperCase(), 
+            icon: icon,
+            color: color
+          },
+        };
+      });
+
+      const newEdges: Edge[] = data.edges.map((e: any, i: number) => ({
+        id: `e-${i}`,
+        source: e.from,
+        target: e.to,
+        label: e.label,
+        animated: true,
+        style: { stroke: '#7CFF6B' }
+      }));
+
+      setNodes(newNodes);
+      setEdges(newEdges);
+    } catch (err) {
+      console.error("Failed to fetch graph:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const onConnect = useCallback(
     (params: Connection) => setEdges((eds) => addEdge(params, eds)),
@@ -145,39 +180,34 @@ export default function WorkflowGraph() {
     <div className="h-full flex flex-col">
       <header className="h-16 border-b border-border/50 flex items-center justify-between px-8 bg-background/50 backdrop-blur-sm">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-display font-bold">Workflow Topology</h2>
+          <h2 className="text-lg font-display font-bold">Session Decision Graph</h2>
           <div className="h-4 w-[1px] bg-border" />
           <div className="flex items-center gap-2 text-white/40 text-sm">
             <Settings className="w-4 h-4" />
-            <span>Deterministic Engine v2.4.0</span>
+            <span className="font-mono">{activeSessionId.substring(0, 12)}...</span>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-6 mr-6">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-cyan-400" />
-              <span className="text-[11px] text-white/40 uppercase font-bold">Input</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-purple-400" />
-              <span className="text-[11px] text-white/40 uppercase font-bold">Processing</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-amber-400" />
-              <span className="text-[11px] text-white/40 uppercase font-bold">Validation</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-[11px] text-white/40 uppercase font-bold">Output</span>
-            </div>
-          </div>
-          <Button size="sm" variant="outline" className="border-white/10 hover:bg-white/5">
-            Auto Layout
+          <Button onClick={() => fetchGraph(activeSessionId)} size="sm" variant="outline" className="border-white/10 hover:bg-white/5">
+            Refresh Map
           </Button>
         </div>
       </header>
 
       <div className="flex-1 relative">
+        {loading ? (
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-background/50">
+            <Loader2 className="w-12 h-12 text-primary-accent animate-spin" />
+          </div>
+        ) : nodes.length === 0 ? (
+          <div className="absolute inset-0 flex items-center justify-center z-10">
+            <div className="text-center space-y-4">
+              <BrainCircuit className="w-16 h-16 text-white/10 mx-auto" />
+              <p className="text-white/20">No decision nodes recorded yet.</p>
+            </div>
+          </div>
+        ) : null}
+        
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -188,15 +218,16 @@ export default function WorkflowGraph() {
           fitView
           className="bg-[#050505]"
         >
-          <Background color="#ffffff" gap={20} size={1} opacity={0.03} />
+          <Background color="#ffffff" gap={20} size={1} style={{ opacity: 0.03 }} />
           <Controls className="!bg-elevated !border-border !fill-white" />
           <MiniMap 
             className="!bg-elevated !border-border" 
-            nodeColor={(node: WorkflowNode) => {
+            nodeColor={(node: any) => {
               if (node.data.color === 'cyan') return '#38BDF8';
               if (node.data.color === 'purple') return '#8B5CF6';
               if (node.data.color === 'amber') return '#F59E0B';
               if (node.data.color === 'green') return '#7CFF6B';
+              if (node.data.color === 'pink') return '#EC4899';
               return '#111827';
             }}
             maskColor="rgba(0, 0, 0, 0.6)"

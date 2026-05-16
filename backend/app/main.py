@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import voice, intent, prompt, memory, graph
+from app.routes import voice, intent, prompt, memory, graph, logs, session
 
 app = FastAPI(title="TOTEM - Voice Prompt Engine")
 
@@ -23,6 +23,8 @@ app.include_router(intent.router)
 app.include_router(prompt.router)
 app.include_router(memory.router)
 app.include_router(graph.router)
+app.include_router(logs.router)
+app.include_router(session.router)
 
 if __name__ == "__main__":
     import uvicorn

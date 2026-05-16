@@ -57,3 +57,73 @@ export const optimizePrompt = async (intentId: string) => {
 
   return response.json();
 };
+
+export const updateIntent = async (intentId: string, updates: any) => {
+  const response = await fetch(`${API_BASE_URL}/intent/update?intent_id=${intentId}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(updates),
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to update intent');
+  }
+
+  return response.json();
+};
+
+export const getPromptDetails = async (promptId: string) => {
+  const response = await fetch(`${API_BASE_URL}/prompt/${promptId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch prompt details');
+  }
+  return response.json();
+};
+
+export const listMemories = async (sessionId: string) => {
+  const response = await fetch(`${API_BASE_URL}/memory/list/${sessionId}`);
+  if (!response.ok) {
+    throw new Error('Failed to list memories');
+  }
+  return response.json();
+};
+
+export const createMemory = async (data: { user_session_id: string, fact_text: string, memory_type?: string }) => {
+  const response = await fetch(`${API_BASE_URL}/memory/create`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    throw new Error('Failed to create memory');
+  }
+  return response.json();
+};
+
+export const listDecisionLogs = async (sessionId: string) => {
+  const response = await fetch(`${API_BASE_URL}/logs/${sessionId}`);
+  if (!response.ok) {
+    throw new Error('Failed to list decision logs');
+  }
+  return response.json();
+};
+
+export const getSessionGraph = async (sessionId: string) => {
+  const response = await fetch(`${API_BASE_URL}/graph/session/${sessionId}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch session graph');
+  }
+  return response.json();
+};
+
+export const listSessions = async () => {
+  const response = await fetch(`${API_BASE_URL}/sessions/`);
+  if (!response.ok) {
+    throw new Error('Failed to list sessions');
+  }
+  return response.json();
+};
