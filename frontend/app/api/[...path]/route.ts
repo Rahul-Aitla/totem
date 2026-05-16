@@ -31,9 +31,22 @@ async function proxyRequest(
   }
 
   const backendResponse = await fetch(targetUrl, init);
+
+  const responseHeaders = new Headers(backendResponse.headers);
+  responseHeaders.delete("content-encoding");
+  responseHeaders.delete("content-length");
+  responseHeaders.delete("transfer-encoding");
+  responseHeaders.delete("connection");
+  responseHeaders.delete("keep-alive");
+  responseHeaders.delete("proxy-authenticate");
+  responseHeaders.delete("proxy-authorization");
+  responseHeaders.delete("te");
+  responseHeaders.delete("trailer");
+  responseHeaders.delete("upgrade");
+
   return new Response(backendResponse.body, {
     status: backendResponse.status,
-    headers: backendResponse.headers,
+    headers: responseHeaders,
   });
 }
 
