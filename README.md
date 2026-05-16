@@ -77,15 +77,23 @@ npm run dev
 
 ```mermaid
 flowchart LR
-  A[Browser/Mobile] -->|record audio| B[Frontend]
-  B -->|POST /voice/upload| C[Backend - FastAPI]
-  C -->|STT (Deepgram)| D[Deepgram]
-  C -->|Intent extraction| E[Gemini]
-  C -->|Optimize prompt| F[Prompt Optimizer]
-  C -->|Store & query| G[Postgres]
-  C -->|Decision logs| H[Decision Logs]
-  G -->|similarity search| C
-  B -->|Graph / Memory UI| C
+    A["Browser / Mobile"] -->|record audio| B["Frontend"]
+
+    B -->|POST voice upload| C["Backend FastAPI"]
+
+    C -->|STT Deepgram| D["Deepgram"]
+
+    C -->|Intent extraction| E["Gemini"]
+
+    C -->|Optimize prompt| F["Prompt Optimizer"]
+
+    C -->|Store and query| G["Postgres"]
+
+    C -->|Decision logs| H["Decision Logs"]
+
+    G -->|similarity search| C
+
+    B -->|Graph and Memory UI| C
 ```
 
 - **Frontend:** Next.js app with dashboard pages (Memory, Workflow/Graph, Logs).
